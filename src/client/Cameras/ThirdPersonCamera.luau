@@ -1,0 +1,120 @@
+--[[
+	ThirdPersonCamera
+	Chase camera. Yaw follows a blend of facing and travel direction with smoothing, pitch tilts
+	down on steep slopes, distance grows slightly with speed, and a spherecast keeps the camera
+	out of terrain and trees. Mouse/stick orbiting is temporary and eases back behind the rider.
+
+	The camera is positioned relative to the root's current position (no positional lag), so it
+	never jitters or falls behind at high speed; only angles and distance are smoothed.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local CameraConfig = require(ReplicatedStorage.Shared.Config.CameraConfig)
+local CameraMath = require(script.Parent.CameraMath)
+
+local Config = CameraConfig.ThirdPerson
+
+local ThirdPersonCamera = {}
+ThirdPersonCamera.__index = ThirdPersonCamera
+ThirdPersonCamera.Fov = Config.Fov
+
+function ThirdPersonCamera.new()
+	return setmetatable({
+		Yaw = 0,
+		Pitch = math.rad(Config.Pitch),
+		OrbitYaw = 0,
+		OrbitPitch = 0,
+		OrbitIdle = 0,
+		Distance = Config.Distance,
+		TargetDistance = Config.Distance,
+		CurrentDistance = Config.Distance,
+	}, ThirdPersonCamera)
+end
+
+function ThirdPersonCamera:Enter(_camera: Camera, state)
+	local facing = CameraMath.Flat(state.Heading) or Vector3.new(0, 0, -1)
+	self.Yaw = CameraMath.YawFromDirection(facing)
+	self.OrbitYaw, self.OrbitPitch = 0, 0
+	self.CurrentDistance = self.TargetDistance
+end
+
+function ThirdPersonCamera:Exit(_camera: Camera, _state) end
+
+function ThirdPersonCamera:Update(dt: number, camera: Camera, state, input)
+	local root = state.Root
+	if not root then
+		return
+	end
+
+	-- Zoom
+	if input.Zoom ~= 0 then
+		self.TargetDistance = math.clamp(self.TargetDistance + input.Zoom * Config.ZoomStep, Config.MinDistance, Config.MaxDistance)
+	end
+
+	-- Orbit from look input, easing back to behind-the-rider when released
+	if input.Look.Magnitude > 0 then
+		local sensitivity = math.rad(Config.OrbitSensitivity)
+		self.OrbitYaw -= input.Look.X * sensitivity
+		self.OrbitPitch = math.clamp(self.OrbitPitch + input.Look.Y * sensitivity, -math.rad(Config.MaxOrbitPitch), math.rad(Config.MaxOrbitPitch))
+	end
+	if input.Looking then
+		self.OrbitIdle = 0
+	else
+		self.OrbitIdle += dt
+		if self.OrbitIdle > Config.OrbitReturnDelay then
+			local alpha = CameraMath.ExpAlpha(Config.OrbitReturnRate, dt)
+			self.OrbitYaw = CameraMath.LerpAngle(self.OrbitYaw, 0, alpha)
+			self.OrbitPitch += (0 - self.OrbitPitch) * alpha
+		end
+	end
+
+	-- Base yaw: facing blended toward travel direction once moving
+	if state.Mode ~= "Crashed" then
+		local facing = CameraMath.Flat(state.Heading)
+		local travel = CameraMath.Flat(state.Velocity)
+		local target = facing
+		if travel and facing and state.Speed > 8 then
+			target = facing:Lerp(travel, Config.VelocityBlend)
+			target = CameraMath.Flat(target) or facing
+		end
+		if target then
+			self.Yaw = CameraMath.LerpAngle(self.Yaw, CameraMath.YawFromDirection(target), CameraMath.ExpAlpha(Config.YawResponsiveness, dt))
+		end
+	end
+
+	-- Pitch down further on steep ground so the slope ahead stays in view
+	local slopePitch = 0
+	if state.Grounded then
+		slopePitch = -math.asin(math.clamp(state.Forward.Y, -1, 1)) * Config.SlopePitchFollow
+	end
+	local targetPitch = math.rad(Config.Pitch) + slopePitch
+	self.Pitch += (targetPitch - self.Pitch) * CameraMath.ExpAlpha(Config.PitchResponsiveness, dt)
+
+	-- Distance with speed bonus
+	local speedT = math.clamp(state.Speed / Config.SpeedForMaxBonus, 0, 1)
+	local desiredDistance = self.TargetDistance + Config.SpeedDistanceBonus * speedT
+
+	local rotation = CFrame.Angles(0, self.Yaw + self.OrbitYaw, 0) * CFrame.Angles(-(self.Pitch + self.OrbitPitch), 0, 0)
+	local focus = root.Position + Vector3.yAxis * Config.FocusHeight
+	local direction = -rotation.LookVector
+
+	-- Collision: pull in instantly, ease back out
+	local allowed = desiredDistance
+	local hit = Workspace:Spherecast(focus, Config.CollisionRadius, direction * desiredDistance, input.RaycastParams)
+	if hit then
+		allowed = math.max(hit.Distance - 0.2, 1.5)
+	end
+	if allowed < self.CurrentDistance then
+		self.CurrentDistance = allowed
+	else
+		self.CurrentDistance += (allowed - self.CurrentDistance) * CameraMath.ExpAlpha(Config.DistanceResponsiveness, dt)
+	end
+
+	local position = focus + direction * self.CurrentDistance
+	camera.CFrame = CFrame.lookAt(position, focus)
+	camera.Focus = CFrame.new(focus)
+end
+
+return ThirdPersonCamera
