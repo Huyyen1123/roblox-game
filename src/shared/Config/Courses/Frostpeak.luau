@@ -15,7 +15,7 @@ return {
 	DisplayName = "Frostpeak",
 	Seed = 1337,
 
-	-- Kept clear of the template Baseplate at the world origin.
+	-- Placed away from the world origin, leaving room for other areas.
 	Origin = Vector3.new(0, 0, 1500),
 	StartY = 600,
 

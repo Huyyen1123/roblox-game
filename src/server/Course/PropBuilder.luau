@@ -90,6 +90,22 @@ local function buildStart(heightfield, folder)
 		Parent = folder,
 	})
 
+	-- Where Roblox first places a loaded character, before PlayerService moves it to its
+	-- start slot. Invisible and non-colliding: it only needs to exist on solid ground.
+	Create("SpawnLocation", {
+		Name = "CourseSpawn",
+		Size = Vector3.new(12, 1, 12),
+		CFrame = base * CFrame.new(0, 0.5, 0),
+		Anchored = true,
+		Neutral = true,
+		Duration = 0,
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Parent = folder,
+	})
+
 	local gateZ = z + 22
 	buildArch(folder, "StartArch", heightfield:GetUprightCFrame(heightfield:CenterX(gateZ), gateZ, 0), 30, course.DisplayName:upper() .. "  START", {
 		Pillar = Color3.fromRGB(40, 50, 70),
