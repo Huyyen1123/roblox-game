@@ -29,9 +29,13 @@ local function smoothMax(a: number, b: number, k: number): number
 	return (a + b + math.sqrt(d * d + k * k)) / 2
 end
 
--- Soft ramp: 0 before start, then rises with the given slope, with a rounded knee.
+-- Soft ramp: exactly 0 for x <= 0, then eases into slope 1 (approaching x - knee).
+-- Smooth at 0, so terrain built from it has no step where a feature begins.
 local function softRamp(x: number, knee: number): number
-	return (x + math.sqrt(x * x + knee * knee)) / 2 - knee / 2
+	if x <= 0 then
+		return 0
+	end
+	return x * x / (x + knee)
 end
 
 function Heightfield.new(course)
@@ -203,6 +207,19 @@ function Heightfield:ValleyFloor(x: number, z: number): number
 	return side.FloorY + self:Fbm(x, z, 260, 3) * side.FloorNoise
 end
 
+-- Smooth ridge of snow piled against the safety netting, within the dressed Z range.
+function Heightfield:Snowbank(z: number, offset: number): number
+	local course = self.Course
+	local dressing = course.Dressing
+	if z < dressing.StartZ - 20 or z > dressing.EndZ + 20 then
+		return 0
+	end
+	local window = smoothstep(dressing.StartZ - 20, dressing.StartZ + 20, z) * (1 - smoothstep(dressing.EndZ - 20, dressing.EndZ + 20, z))
+	local fence = self.World.Piste.HalfWidth + course.Fences.Inset - 1
+	local d = (math.abs(offset) - fence) / dressing.SnowbankWidth
+	return dressing.SnowbankHeight * math.exp(-d * d) * window
+end
+
 -- Height of one mountain range above the valley floor, given how far into it the point is.
 function Heightfield:RangeHeight(x: number, z: number, distance: number, range, seedOffset: number): number
 	local envelope = smoothstep(range.Start, range.FullAt, distance)
@@ -235,7 +252,7 @@ function Heightfield:GetHeight(x: number, z: number): number
 	local offset = self:Offset(x, z)
 	local beyond = math.abs(offset) - world.Piste.HalfWidth
 
-	local h = self:ProfileY(z) + self:RollerOffset(z) + self:SideHeight(x, z, offset)
+	local h = self:ProfileY(z) + self:RollerOffset(z) + self:SideHeight(x, z, offset) + self:Snowbank(z, offset)
 
 	-- Gentle undulation on the piste, rougher terrain away from it
 	local roughness = smoothstep(0, 120, beyond)

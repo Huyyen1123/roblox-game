@@ -23,16 +23,26 @@ return {
 		ShadowSoftness = 0.15,
 	},
 
+	-- Haze is tuned with the skybox: thick enough to hide the seam where the painted
+	-- mountains meet the horizon, thin enough that their peaks rise clearly out of the mist.
 	Atmosphere = {
-		Density = 0.24,
-		Offset = 0.2,
+		Density = 0.22,
+		Offset = 0.35,
 		Color = Color3.fromRGB(214, 224, 240),
 		Decay = Color3.fromRGB(150, 166, 196),
 		Glare = 0.2,
-		Haze = 0.8,
+		Haze = 1.2,
 	},
 
+	-- Distant mountain panorama ("Snowy Mountain Skybox", Creator Store asset 402232085,
+	-- audited: a plain Sky with image textures, no scripts).
 	Sky = {
+		SkyboxBk = "rbxassetid://402229526",
+		SkyboxFt = "rbxassetid://402229293",
+		SkyboxUp = "rbxassetid://402229564",
+		SkyboxDn = "rbxassetid://402229596",
+		SkyboxLf = "rbxassetid://402229368",
+		SkyboxRt = "rbxassetid://402229417",
 		CelestialBodiesShown = true,
 		SunAngularSize = 13,
 		MoonAngularSize = 9,
@@ -61,5 +71,14 @@ return {
 	SunRays = {
 		Intensity = 0.05,
 		Spread = 0.55,
+	},
+
+	-- Terrain surface textures: MaterialVariants (AI-generated PBR, stored in the place's
+	-- MaterialService) that replace the stock look of each base material. StudsPerTile is kept
+	-- large so the texture doesn't visibly repeat across wide slopes.
+	MaterialOverrides = {
+		{ Material = Enum.Material.Snow, Variant = "AlpineSnowWhite1", StudsPerTile = 16 },
+		{ Material = Enum.Material.Rock, Variant = "AlpineGraniteCliff", StudsPerTile = 32 },
+		{ Material = Enum.Material.Slate, Variant = "AlpineDarkSlate", StudsPerTile = 32 },
 	},
 }

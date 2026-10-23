@@ -6,11 +6,12 @@
 	finish area. Density follows low-frequency noise so trees form natural stands and
 	clearings instead of an even carpet, and thins out away from the course.
 
-	Trees: if ServerStorage.Assets.Trees contains Models or MeshParts (for example pines from a
-	trusted Creator Store pack), random templates are cloned and scaled. Otherwise a
-	procedural low-poly pine is built from pyramid tiers: near the course with a trunk,
-	three tiers and collisions; far away with two tiers, no collisions and no shadows, to keep
-	the part count reasonable for 8-player servers.
+	Trees: Models in ServerStorage.Assets.Trees (snow-covered spruce MeshParts imported from the
+	Creator Store; they live in the place file, not in Rojo) are cloned, sized to a target
+	height and grounded by their real lowest point. Identical meshes are instanced by the
+	renderer, so hundreds of copies stay cheap. Meshes never collide; trees near the piste get
+	one invisible trunk collider, and far trees skip shadows.
+	Without templates, a procedural low-poly pine is built from pyramid tiers as a fallback.
 ]]
 
 local ServerStorage = game:GetService("ServerStorage")
@@ -28,38 +29,60 @@ local TRUNK_COLOR = Color3.fromRGB(78, 56, 42)
 
 local ForestBuilder = {}
 
-local function getTemplates(): { Instance }
+local SINK = 0.6 -- studs the base is buried so trees never float on uneven snow
+
+-- Imported models come with arbitrary pivots and sizes, so each template is measured once:
+-- its height, and how far its pivot sits above its lowest point.
+local function getTemplates(): { { Template: Model, Height: number, Lift: number, Rotation: CFrame } }
 	local assets = ServerStorage:FindFirstChild("Assets")
 	local folder = assets and assets:FindFirstChild("Trees")
 	local templates = {}
 	if folder then
 		for _, child in folder:GetChildren() do
-			if child:IsA("Model") or child:IsA("BasePart") then
-				table.insert(templates, child)
+			if child:IsA("Model") then
+				local box, size = child:GetBoundingBox()
+				local pivot = child:GetPivot()
+				table.insert(templates, {
+					Template = child,
+					Height = size.Y,
+					Lift = pivot.Position.Y - (box.Position.Y - size.Y / 2),
+					Rotation = pivot.Rotation,
+				})
 			end
 		end
 	end
 	return templates
 end
 
-local function placeTemplate(parent: Instance, template: Instance, ground: Vector3, scale: number, yaw: number, near: boolean)
-	local tree = template:Clone()
-	local cframe = CFrame.new(ground) * CFrame.Angles(0, yaw, 0)
-	if tree:IsA("Model") then
-		tree:ScaleTo(tree:GetScale() * scale)
-		local _, size = tree:GetBoundingBox()
-		tree:PivotTo(cframe * CFrame.new(0, size.Y / 2 - 0.5, 0))
-	else
-		tree.Size *= scale
-		tree.CFrame = cframe * CFrame.new(0, tree.Size.Y / 2 - 0.5, 0)
-	end
-	for _, part in (if tree:IsA("BasePart") then { tree } else tree:GetDescendants()) do
+local function placeTemplate(parent: Instance, info, ground: Vector3, height: number, yaw: number, near: boolean)
+	local scale = height / info.Height
+	local tree = info.Template:Clone()
+	tree:ScaleTo(tree:GetScale() * scale)
+	tree:PivotTo(CFrame.new(ground + Vector3.new(0, info.Lift * scale - SINK, 0)) * CFrame.Angles(0, yaw, 0) * info.Rotation)
+
+	-- Visual meshes never collide; near the course an invisible trunk collider stands in,
+	-- which is far cheaper than mesh collision and doesn't snag riders on branch tips.
+	for _, part in tree:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
 			part.CanTouch = false
-			part.CanCollide = near
 			part.CastShadow = near
 		end
+	end
+	if near then
+		local radius = math.max(0.8, height * 0.035)
+		local collider = Instance.new("Part")
+		collider.Name = "TrunkCollider"
+		collider.Shape = Enum.PartType.Cylinder
+		collider.Size = Vector3.new(height * 0.6, radius * 2, radius * 2)
+		collider.CFrame = CFrame.new(ground + Vector3.new(0, height * 0.3 - SINK, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		collider.Transparency = 1
+		collider.Anchored = true
+		collider.CanTouch = false
+		collider.CastShadow = false
+		collider.Parent = tree
 	end
 	tree.Parent = parent
 end
@@ -166,7 +189,7 @@ function ForestBuilder.Build(heightfield, courseFolder: Instance)
 			local yaw = random:NextNumber(0, math.pi * 2)
 			local scale = random:NextNumber(0.7, 1.35)
 			if #templates > 0 then
-				placeTemplate(folder, templates[random:NextInteger(1, #templates)], ground, scale, yaw, near)
+				placeTemplate(folder, templates[random:NextInteger(1, #templates)], ground, (if near then 30 else 38) * scale, yaw, near)
 			else
 				buildPine(folder, ground, (if near then 22 else 28) * scale, yaw, near)
 			end

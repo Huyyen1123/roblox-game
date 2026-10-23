@@ -20,7 +20,7 @@ return {
 	StartY = 600,
 
 	Segments = {
-		{ Length = 80, Angle = 0 }, -- 0-80     start area
+		{ Length = 80, Angle = 2 }, -- 0-80     start area (gentle pitch so riders roll toward the gate)
 		{ Length = 300, Angle = 14 }, -- 80-380   warm-up
 		{ Length = 250, Angle = 22 }, -- 380-630  first steep
 		{ Length = 220, Angle = 10 }, -- 630-850  mellow
@@ -40,7 +40,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 6,
+		TerrainVersion = 10,
 
 		-- Terrain is generated this far from the centre line / course ends.
 		Extent = { Mountain = 640, Valley = 1500, Uphill = 420, Downhill = 1400 },
@@ -68,15 +68,13 @@ return {
 		Plaza = { Length = 220, DropSlope = 0.7 },
 
 		Noise = { Scale = 110, Amplitude = 6 },
-		Materials = { RockSlope = 1.25, MixedSlope = 0.8 },
+		Materials = { RockSlope = 1.25, MixedSlope = 0.8, SnowyEdge = 90, EdgeRockSlope = 1.7 },
 		Lake = { Scale = 380, Threshold = 0.12 },
 
 		Boulders = { Count = 90, MinRadius = 3, MaxRadius = 10 },
 
 		Forest = { Spacing = 15, NearDistance = 150, MaxDistance = 700, MinPisteGap = 14, MaxSlope = 0.75, Density = 0.55, FarDensity = 0.3, NoiseScale = 180 },
 
-		-- Faded silhouettes on the horizon, beyond the terrain.
-		Backdrop = { Peaks = 40, Radius = { 1800, 4500 } },
 	},
 
 	-- Placed so each lands on a steeper section below it.
@@ -98,6 +96,17 @@ return {
 
 	Gates = { StartZ = 180, EndZ = 2000, Spacing = 150, Offset = 22, KickerClearance = 45 },
 	Fences = { StartZ = 60, EndZ = 2440, SegmentLength = 16, Inset = 6 },
+
+	-- Detailed course dressing. Applied to the benchmark section first; widen the range once
+	-- that section is signed off.
+	Dressing = {
+		StartZ = 0,
+		EndZ = 650,
+		SnowbankHeight = 2.4, -- smooth ridge of snow piled against the netting (terrain)
+		SnowbankWidth = 3.5,
+		BannerSpacing = 64, -- red banners on poles along the netting
+		MarkerSpacing = 40, -- trail marker poles just outside the piste
+	},
 
 	Start = { Z = 25 },
 	Finish = { Z = 2150 },

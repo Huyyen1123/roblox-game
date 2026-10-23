@@ -7,7 +7,7 @@
 	Terrain carries a "CourseTerrain" attribute ("<course id>:<TerrainVersion>"), and when it
 	matches the config the terrain is reused instead of regenerated. Run CourseService.Init()
 	in edit mode (see docs/VISUALS.md) and save the place to bake it. Props, forest and
-	backdrop are always rebuilt at runtime.
+	course dressing are always rebuilt at runtime.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,7 +22,7 @@ local Heightfield = require(Course.Heightfield)
 local TerrainBuilder = require(Course.TerrainBuilder)
 local PropBuilder = require(Course.PropBuilder)
 local ForestBuilder = require(Course.ForestBuilder)
-local BackdropBuilder = require(Course.BackdropBuilder)
+local DressingBuilder = require(Course.DressingBuilder)
 local Environment = require(Course.Environment)
 
 local SPAWN_HEIGHT = 5
@@ -77,7 +77,7 @@ function CourseService.Init()
 	local terrainTime = os.clock() - started
 	PropBuilder.Build(heightfield, folder)
 	local trees = ForestBuilder.Build(heightfield, folder)
-	BackdropBuilder.Build(heightfield, folder)
+	DressingBuilder.Build(heightfield, folder)
 
 	folder:SetAttribute(Constants.Attributes.CourseReady, true)
 	readyEvent:Fire()

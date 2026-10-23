@@ -20,7 +20,7 @@ local YIELD_BUDGET = 0.03 -- seconds of work between yields
 local MATERIAL_COLORS = {
 	[Enum.Material.Snow] = Color3.fromRGB(236, 242, 250),
 	[Enum.Material.Rock] = Color3.fromRGB(112, 116, 126),
-	[Enum.Material.Slate] = Color3.fromRGB(88, 92, 104),
+	[Enum.Material.Slate] = Color3.fromRGB(120, 124, 134),
 	[Enum.Material.Glacier] = Color3.fromRGB(168, 205, 230),
 }
 
@@ -47,7 +47,12 @@ local function chooseMaterial(heightfield, x: number, z: number, height: number,
 	local world = heightfield.World
 	local materials = world.Materials
 
-	if heightfield:DistanceFromPiste(x, z) <= 0 then
+	local beyond = heightfield:DistanceFromPiste(x, z)
+	if beyond <= 0 then
+		return Enum.Material.Snow
+	end
+	-- Snow holds on the banks right beside the piste; bare rock only on genuinely sheer drops
+	if beyond < materials.SnowyEdge and slope < materials.EdgeRockSlope then
 		return Enum.Material.Snow
 	end
 	if heightfield:IsLake(x, z, height) then
