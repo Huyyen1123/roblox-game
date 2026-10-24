@@ -20,6 +20,44 @@ function CharacterUtil.GetFootOffset(character: Model): number
 	return root.Size.Y / 2 + humanoid.HipHeight
 end
 
+-- A joint's offsets in Part0 / Part1 space, for both R15 joint types (Motor6D and the newer
+-- AnimationConstraint). Part1 = Part0 * c0 * Transform * c1:Inverse().
+function CharacterUtil.JointFrames(joint: Instance): (CFrame, CFrame)
+	if joint:IsA("Motor6D") then
+		return joint.C0, joint.C1
+	end
+	local constraint = joint :: AnimationConstraint
+	return constraint.Attachment0.CFrame, constraint.Attachment1.CFrame
+end
+
+local LEG_CHAIN = {
+	{ "LowerTorso", "Root" },
+	{ "UpperLeg", "Hip" },
+	{ "LowerLeg", "Knee" },
+	{ "Foot", "Ankle" },
+}
+
+--[[
+	Where an R15 foot sits relative to the HumanoidRootPart in the unposed (rest) rig, from the
+	joint offsets alone, so it doesn't depend on whatever animation is playing. Riding gear is
+	placed from this, and the riding pose puts the feet back onto the gear. nil for R6 rigs.
+]]
+function CharacterUtil.GetRestFootCFrame(character: Model, side: string): CFrame?
+	local frame = CFrame.identity
+	for _, link in LEG_CHAIN do
+		local partName = if link[1] == "LowerTorso" then link[1] else side .. link[1]
+		local jointName = if link[2] == "Root" then link[2] else side .. link[2]
+		local part = character:FindFirstChild(partName)
+		local joint = part and part:FindFirstChild(jointName)
+		if not joint or not (joint:IsA("Motor6D") or joint:IsA("AnimationConstraint")) then
+			return nil
+		end
+		local c0, c1 = CharacterUtil.JointFrames(joint)
+		frame = frame * c0 * c1:Inverse()
+	end
+	return frame
+end
+
 function CharacterUtil.GetAlive(character: Model?): (Humanoid?, BasePart?)
 	if not character then
 		return nil, nil

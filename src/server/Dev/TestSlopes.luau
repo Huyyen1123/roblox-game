@@ -87,7 +87,8 @@ function TestSlopes.Build(settings)
 			CFrame = CFrame.new(top + Vector3.new(0, 12, -padLength)),
 			Parent = lane,
 		}, {
-			Create("BillboardGui", { Size = UDim2.fromOffset(220, 60), AlwaysOnTop = true }, {
+			-- Only readable at the lane itself; never drawn over the course
+			Create("BillboardGui", { Size = UDim2.fromOffset(220, 60), AlwaysOnTop = false, MaxDistance = 150 }, {
 				Create("TextLabel", {
 					Size = UDim2.fromScale(1, 1),
 					BackgroundTransparency = 1,

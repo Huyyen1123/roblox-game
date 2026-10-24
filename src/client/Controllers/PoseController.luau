@@ -157,9 +157,11 @@ local function step(dt: number)
 			input = remoteInput(character)
 		end
 
-		-- Vertical acceleration (from the replicated root) lets the knees absorb dips and crests
+		-- Vertical acceleration (from the replicated root) lets the knees absorb dips and crests;
+		-- the root's roll tells the legs how far the rider leans into a turn
 		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
+			input.Lean = math.asin(math.clamp(root.CFrame.RightVector.Y, -1, 1))
 			local verticalSpeed = root.AssemblyLinearVelocity.Y
 			local previous = lastVerticalSpeed[character]
 			lastVerticalSpeed[character] = verticalSpeed

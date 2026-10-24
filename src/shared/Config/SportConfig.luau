@@ -72,8 +72,18 @@ local Sports = {
 	},
 }
 
+-- Winter outfit worn by every rider (blocky, per the style guide)
+local Outfit = {
+	HelmetColor = Color3.fromRGB(28, 30, 36),
+	LensColor = Color3.fromRGB(120, 95, 255),
+	GoggleFrameColor = Color3.fromRGB(20, 20, 24),
+	BackpackColor = Color3.fromRGB(32, 34, 40),
+	BackpackAccentColor = Color3.fromRGB(230, 230, 235),
+}
+
 local SportConfig = {
 	Sports = Sports,
+	Outfit = Outfit,
 	Order = { "Ski", "Snowboard" },
 	BaseStats = BaseStats,
 }

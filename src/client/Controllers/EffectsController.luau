@@ -32,10 +32,10 @@ local function numberSequence(a: number, b: number)
 	return NumberSequence.new({ NumberSequenceKeypoint.new(0, a), NumberSequenceKeypoint.new(1, b) })
 end
 
-local function newTrail(root: BasePart, a: Vector3, b: Vector3)
+local function newTrail(parent: BasePart, a: Vector3, b: Vector3)
 	local settings = EffectsConfig.Trail
-	local att0 = Create("Attachment", { Name = "TrailA", Position = a, Parent = root })
-	local att1 = Create("Attachment", { Name = "TrailB", Position = b, Parent = root })
+	local att0 = Create("Attachment", { Name = "TrailA", Position = a, Parent = parent })
+	local att1 = Create("Attachment", { Name = "TrailB", Position = b, Parent = parent })
 	local trail = Create("Trail", {
 		Attachment0 = att0,
 		Attachment1 = att1,
@@ -46,7 +46,7 @@ local function newTrail(root: BasePart, a: Vector3, b: Vector3)
 		FaceCamera = false,
 		MinLength = 0.2,
 		Enabled = false,
-		Parent = root,
+		Parent = parent,
 	})
 	return { trail, att0, att1 }
 end
@@ -96,23 +96,23 @@ local function buildRig(character: Model, equipment: Model)
 	local inset = EffectsConfig.Trail.Inset
 	local instances = {}
 	local trails = {}
-	local function addTrail(a: Vector3, b: Vector3)
-		local parts = newTrail(root, a, b)
-		table.insert(trails, parts[1])
-		table.move(parts, 1, #parts, #instances + 1, instances)
+	-- Trails ride on the gear itself (skis follow the feet), across the base near the tail
+	for _, gear in equipment:GetChildren() do
+		if gear:IsA("BasePart") and (gear.Name == "Ski" or gear.Name == "Board") then
+			local size = gear.Size
+			local z = size.Z / 2 - inset
+			local y = -size.Y / 2 + 0.02
+			local parts = newTrail(gear, Vector3.new(-size.X / 2, y, z), Vector3.new(size.X / 2, y, z))
+			table.insert(trails, parts[1])
+		end
 	end
 
 	local halfWidth, tailZ
 	if spec.Kind == "Skis" then
 		tailZ = -spec.MountOffset + spec.Length / 2 - inset
-		for _, side in { -1, 1 } do
-			local x = side * spec.Spacing / 2
-			addTrail(Vector3.new(x - spec.Width / 2, snowY, tailZ), Vector3.new(x + spec.Width / 2, snowY, tailZ))
-		end
 		halfWidth = spec.Spacing / 2 + spec.ShovelWidth / 2
 	else
 		tailZ = spec.Length / 2 - spec.KickLength - inset
-		addTrail(Vector3.new(-spec.Width / 2, snowY, tailZ), Vector3.new(spec.Width / 2, snowY, tailZ))
 		halfWidth = spec.Width / 2
 	end
 

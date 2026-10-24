@@ -3,8 +3,9 @@
 	Builds skis (with bindings and poles) or a snowboard (with strap bindings) under the
 	character's feet, plus boots. Temporary primitive geometry, proportioned to an R15 avatar;
 	the final MeshPart spec is in docs/EQUIPMENT_ASSETS.md.
-	Skis and board are welded to the HumanoidRootPart so they stay flat on the snow (the riding
-	pose keeps the feet planted on them); boots are welded to the feet. Poles are welded into the hands, so they follow the
+	Feet and gear are one system: skis (and their bindings) and boots are welded to the feet,
+	so they follow every pose; the snowboard is welded to the HumanoidRootPart and the riding
+	pose solves both feet onto its bindings (see client/Animation/RiderPose). Poles are welded into the hands, so they follow the
 	client-side arm pose: trailing while riding, tucked under the arms, planting on turns.
 ]]
 
@@ -82,33 +83,50 @@ local function buildBoots(character: Model, model: Model, color: Color3, cuff: b
 	end
 end
 
-local function buildSkis(root: BasePart, model: Model, spec, footY: number)
+-- Skis (with their bindings) are welded to the feet, so each ski follows its boot through
+-- every pose. Offsets are laid out in root space for a foot standing on its ski, then
+-- converted into that foot's space. The riding pose (RiderPose) puts the feet exactly there.
+local function buildSkis(character: Model, root: BasePart, model: Model, spec, footY: number)
 	local thickness = spec.Thickness
 	local y = footY - BASE_DROP + thickness / 2 -- ski base on the snow
 	local top = y + thickness / 2
 	local riser = footY - 0.1 - top -- binding plate fills the gap up to the boot sole
 	local length = spec.Length
-	local centerZ = -spec.MountOffset -- boot slightly behind the ski's centre
+	local restLeft = CharacterUtil.GetRestFootCFrame(character, "Left")
+	local restRight = CharacterUtil.GetRestFootCFrame(character, "Right")
+	local footZ = if restLeft and restRight then (restLeft.Position.Z + restRight.Position.Z) / 2 else 0
+	local centerZ = footZ - spec.MountOffset -- boot slightly behind the ski's centre
 
 	for _, side in { -1, 1 } do
 		local x = side * spec.Spacing / 2
+		local foot = character:FindFirstChild(if side < 0 then "LeftFoot" else "RightFoot") :: BasePart?
+		-- Base part and the transform from root-space layout into its space
+		local base, mount = root, CFrame.identity
+		if foot and restLeft then
+			base = foot
+			mount = CFrame.new(x, footY + foot.Size.Y / 2, footZ):Inverse()
+		end
+		local function part(name: string, size: Vector3, offset: CFrame, color: Color3)
+			attach(base, model, name, size, mount * offset, color)
+		end
+
 		local center = CFrame.new(x, y, centerZ)
 		-- Waist, with wider forebody and tail sections (sidecut)
-		attach(root, model, "Ski", Vector3.new(spec.Width, thickness, length), center, spec.Color)
+		part("Ski", Vector3.new(spec.Width, thickness, length), center, spec.Color)
 		local fore, aft = length * 0.22, length * 0.16
-		attach(root, model, "SkiShovel", Vector3.new(spec.ShovelWidth, thickness, fore), center * CFrame.new(0, 0, -length / 2 + fore / 2), spec.Color)
-		attach(root, model, "SkiTailSection", Vector3.new(spec.ShovelWidth * 0.95, thickness, aft), center * CFrame.new(0, 0, length / 2 - aft / 2), spec.Color)
+		part("SkiShovel", Vector3.new(spec.ShovelWidth, thickness, fore), center * CFrame.new(0, 0, -length / 2 + fore / 2), spec.Color)
+		part("SkiTailSection", Vector3.new(spec.ShovelWidth * 0.95, thickness, aft), center * CFrame.new(0, 0, length / 2 - aft / 2), spec.Color)
 		-- Rounded tip and tail
-		roundedEnd(root, model, "SkiTip", center * CFrame.new(0, 0, -length / 2), spec.ShovelWidth, thickness, spec.TipLength, spec.TipAngle, spec.Color)
-		roundedEnd(root, model, "SkiTail", center * CFrame.new(0, 0, length / 2) * CFrame.Angles(0, math.pi, 0), spec.ShovelWidth * 0.95, thickness, spec.TailLength, spec.TailAngle, spec.Color)
+		roundedEnd(base, model, "SkiTip", mount * center * CFrame.new(0, 0, -length / 2), spec.ShovelWidth, thickness, spec.TipLength, spec.TipAngle, spec.Color)
+		roundedEnd(base, model, "SkiTail", mount * center * CFrame.new(0, 0, length / 2) * CFrame.Angles(0, math.pi, 0), spec.ShovelWidth * 0.95, thickness, spec.TailLength, spec.TailAngle, spec.Color)
 		-- Top-sheet stripe
-		attach(root, model, "SkiStripe", Vector3.new(spec.Width * 0.3, 0.012, length * 0.8), center * CFrame.new(0, thickness / 2 + 0.006, 0), spec.StripeColor)
+		part("SkiStripe", Vector3.new(spec.Width * 0.3, 0.012, length * 0.8), center * CFrame.new(0, thickness / 2 + 0.006, 0), spec.StripeColor)
 		-- Binding: plate under the boot, toe and heel pieces
 		if riser > 0.01 then
-			attach(root, model, "BindingPlate", Vector3.new(spec.Width * 0.9, riser, 1.3), CFrame.new(x, top + riser / 2, 0), spec.BindingColor)
+			part("BindingPlate", Vector3.new(spec.Width * 0.9, riser, 1.3), CFrame.new(x, top + riser / 2, footZ), spec.BindingColor)
 		end
-		attach(root, model, "BindingToe", Vector3.new(spec.Width + 0.04, 0.2, 0.32), CFrame.new(x, footY - 0.05, -0.72), spec.BindingColor)
-		attach(root, model, "BindingHeel", Vector3.new(spec.Width + 0.04, 0.26, 0.4), CFrame.new(x, footY - 0.02, 0.76), spec.BindingColor)
+		part("BindingToe", Vector3.new(spec.Width + 0.04, 0.2, 0.32), CFrame.new(x, footY - 0.05, footZ - 0.72), spec.BindingColor)
+		part("BindingHeel", Vector3.new(spec.Width + 0.04, 0.26, 0.4), CFrame.new(x, footY - 0.02, footZ + 0.76), spec.BindingColor)
 	end
 end
 
@@ -180,6 +198,69 @@ local function buildPoles(character: Model, model: Model, spec)
 	end
 end
 
+-- Accessories join their handle to the body with an AccessoryWeld (older) or a
+-- RigidConstraint between attachments (newer).
+local function isAttachedTo(handle: BasePart, part: BasePart): boolean
+	for _, joint in handle:GetChildren() do
+		if joint:IsA("JointInstance") and (joint.Part0 == part or joint.Part1 == part) then
+			return true
+		end
+		if joint:IsA("RigidConstraint") then
+			local a0, a1 = joint.Attachment0, joint.Attachment1
+			if (a0 and a0.Parent == part) or (a1 and a1.Parent == part) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- Bounds (in head space) of the head plus anything welded to it (hair, hats, face meshes),
+-- so the helmet fits whatever the avatar wears.
+local function headBounds(character: Model, head: BasePart): (Vector3, Vector3)
+	local low, high = -head.Size / 2, head.Size / 2
+	for _, accessory in character:GetChildren() do
+		local handle = accessory:IsA("Accessory") and accessory:FindFirstChild("Handle") :: BasePart?
+		if handle and isAttachedTo(handle, head) then
+			local frame = head.CFrame:ToObjectSpace(handle.CFrame)
+			local half = handle.Size / 2
+			for _, corner in { Vector3.new(1, 1, 1), Vector3.new(1, 1, -1), Vector3.new(1, -1, 1), Vector3.new(1, -1, -1), Vector3.new(-1, 1, 1), Vector3.new(-1, 1, -1), Vector3.new(-1, -1, 1), Vector3.new(-1, -1, -1) } do
+				local point = frame * (half * corner)
+				low = low:Min(point)
+				high = high:Max(point)
+			end
+		end
+	end
+	return low, high
+end
+
+-- Helmet, goggles and backpack, welded to the head and upper torso so they follow the pose.
+local function buildOutfit(character: Model, model: Model)
+	local outfit = SportConfig.Outfit
+	local head = character:FindFirstChild("Head") :: BasePart?
+	if head then
+		local low, high = headBounds(character, head)
+		local size = high - low
+		local center = (low + high) / 2
+		-- Shell over the top of the head, slightly larger than everything it covers
+		local shellHeight = size.Y * 0.38
+		local shellY = high.Y - shellHeight / 2 - 0.04
+		attach(head, model, "Helmet", Vector3.new(size.X + 0.04, shellHeight, size.Z + 0.06), CFrame.new(center.X, shellY, center.Z), outfit.HelmetColor)
+		-- Goggles resting on the helmet's front edge
+		local goggleY = shellY - shellHeight / 2 + 0.05
+		local front = low.Z - 0.08
+		attach(head, model, "GoggleFrame", Vector3.new(size.X * 0.92, size.Y * 0.16, 0.14), CFrame.new(center.X, goggleY, front), outfit.GoggleFrameColor)
+		local lens = attach(head, model, "GoggleLens", Vector3.new(size.X * 0.8, size.Y * 0.11, 0.06), CFrame.new(center.X, goggleY, front - 0.08), outfit.LensColor)
+		lens.Reflectance = 0.25
+	end
+	local torso = character:FindFirstChild("UpperTorso") :: BasePart?
+	if torso then
+		local size = torso.Size
+		local pack = attach(torso, model, "Backpack", Vector3.new(size.X * 0.7, size.Y * 0.8, 0.5), CFrame.new(0, -size.Y * 0.05, size.Z / 2 + 0.25), outfit.BackpackColor)
+		attach(pack, model, "BackpackLogo", Vector3.new(0.4, 0.3, 0.02), CFrame.new(0, 0.15, 0.26), outfit.BackpackAccentColor)
+	end
+end
+
 function EquipmentService.Unequip(character: Model)
 	local existing = character:FindFirstChild(Constants.EquipmentModelName)
 	if existing then
@@ -201,9 +282,10 @@ function EquipmentService.Equip(character: Model, sportId: string)
 	local spec = sport.Equipment
 	local footY = -CharacterUtil.GetFootOffset(character) -- bottom of the feet, in root space
 
+	buildOutfit(character, model)
 	buildBoots(character, model, spec.BootColor, spec.Kind == "Skis")
 	if spec.Kind == "Skis" then
-		buildSkis(root, model, spec, footY)
+		buildSkis(character, root, model, spec, footY)
 		if spec.Poles then
 			buildPoles(character, model, spec.Poles)
 		end

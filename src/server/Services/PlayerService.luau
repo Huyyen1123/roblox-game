@@ -100,6 +100,14 @@ local function onPlayerAdded(player: Player)
 	player.CharacterAdded:Connect(function(character)
 		onCharacterAdded(player, character)
 	end)
+	-- Hair, hats and face meshes can finish loading after spawn: refit the gear (the helmet is
+	-- sized from them) once the avatar is complete.
+	player.CharacterAppearanceLoaded:Connect(function(character)
+		local sport = player:GetAttribute(Attributes.Sport)
+		if sport and player.Character == character then
+			EquipmentService.Equip(character, sport)
+		end
+	end)
 
 	CourseService.WaitUntilReady()
 	if player.Parent then

@@ -3,15 +3,15 @@
 	Riding stance for R15 characters, applied procedurally (see client/Animation/RiderPose).
 	Angles are in degrees.
 
-	Crouch: hip flex angle; the knee bends twice that and the ankle compensates, so the shins
-	tilt forward and the feet stay flat and directly under the hips. The hips drop by the height
-	the bent legs lose, keeping the feet on the skis or board.
-	Values blend between the normal and Tuck columns by how far the rider is into a tuck.
+	Feet always stay on the equipment: the legs are solved (IK) to reach the skis or the board
+	bindings. Crouch sets how far the pelvis drops (as a hip-flex angle); the knees bend as much
+	as needed to keep the feet planted. Values blend between the normal and Tuck columns by how
+	far the rider is into a tuck.
 
-	Turning (skis): both knees drive into the turn (Inclination), the inside leg bends more and
-	the outside leg extends, and the upper body counter-rotates to keep facing down the hill.
-	Poles trail behind while riding, tuck under the arms in a tuck, and the inside pole
-	swings forward and plants at the start of each turn.
+	Turning (skis): the inside ski rides higher as the body leans (edges on the snow), the feet
+	shift to the outside of the turn, and the upper body counter-rotates to keep facing down
+	the hill. Poles trail behind while riding, tuck under the arms in a tuck, and the inside
+	pole swings forward and plants at the start of each turn.
 ]]
 
 return {
@@ -38,11 +38,8 @@ return {
 		NeckCompensation = 0.7, -- share of the torso lean the head undoes, to keep looking ahead
 		StanceYaw = 0,
 		HeadYaw = 0,
-		Spread = 4, -- legs angled slightly apart: an athletic, hip-width stance
-
-		Inclination = 16, -- knees driven into the turn
-		InsideLegBend = 12, -- inside leg flexes more…
-		OutsideLegExtend = 8, -- …outside leg extends, as in a real carve
+		-- Feet shift this far (studs) to the outside of a turn: hips inside, skis outside
+		CarveShift = 0.3,
 		CounterRotation = 10, -- upper body yaws against the turn to keep facing downhill
 		CarveArmForward = 12, -- inside hand drives forward through a carve
 		CarveArmOut = 10, -- outside arm lifts slightly for balance
@@ -77,11 +74,7 @@ return {
 		NeckCompensation = 0.5,
 		StanceYaw = 80, -- body turned sideways on the board (regular: left foot forward)
 		HeadYaw = 65, -- head turned back toward the direction of travel
-		Spread = 11, -- feet apart along the board, over the bindings
-
-		Inclination = 0,
-		InsideLegBend = 0,
-		OutsideLegExtend = 0,
+		CarveShift = 0, -- feet are fixed in the bindings
 		CounterRotation = 0,
 		CarveArmForward = 0,
 		CarveArmOut = 8,
