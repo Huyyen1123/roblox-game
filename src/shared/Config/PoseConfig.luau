@@ -76,6 +76,52 @@ return {
 		HeadYaw = 65, -- head turned back toward the direction of travel
 		CarveShift = 0, -- feet are fixed in the bindings
 		CounterRotation = 0,
+
+		-- Snowboard-only shaping (see RiderPose:ApplyBoard). Toe-side and heel-side carves are
+		-- different shapes; carve depth grows with speed.
+		Board = {
+			CarveFullSpeed = 70, -- studs/s at which carves reach full depth
+			CarveMinDepth = 0.35, -- share of full depth at low speed
+			-- Toe-side: knees and hips drive over the toes, chest folds forward, hands reach low
+			ToeHipShift = 0.35, -- studs toward the toes
+			ToeCrouch = 10,
+			ToeTorso = 7,
+			ToeShoulderOpen = 6,
+			ToeArmForward = 32,
+			-- Heel-side: sit low and back, open the shoulders down the hill, rear hand drags
+			HeelHipShift = 0.65, -- studs toward the heels
+			HeelCrouch = 28,
+			HeelTorso = -6,
+			HeelShoulderOpen = 22,
+			HeelFrontArmOut = 28, -- front arm lifts toward the nose
+			HeelRearArmBack = 60, -- rear arm sweeps back and down toward the snow
+			-- Riding: shoulders slightly toward the nose, small continuous movement
+			ShoulderOpen = 14,
+			IdleKnee = 1.6, -- degrees of slow knee bob
+			IdleSway = 1.5, -- degrees of torso sway
+			IdleArm = 5, -- degrees of arm drift
+			-- Presses and butters (visual only; no speed change)
+			PressAngle = 11, -- degrees the board bends up off the snow
+			PressHipShift = 0.35, -- weight moves over the pressed end
+			PressCrouch = 6,
+			ButterYaw = 16, -- degrees the board pivots with steering while pressing
+			-- Air
+			AirLift = 0.35, -- board comes up toward the body (knees tuck)
+			AirTilt = 8, -- degrees the board tilts with steering in the air
+			SpinLead = 4, -- degrees of upper-body lead per rad/s of spin
+			MaxSpinLead = 35,
+			SpinArmTuck = 20, -- arms pull in during fast spins
+			-- Grabs (indy: rear hand, toe edge; melon: front hand, heel edge; method: front hand,
+			-- heel edge, board tweaked up behind)
+			GrabCrouch = 30,
+			GrabTorso = 18,
+			GrabLift = 0.7, -- board pulled up to the hand
+			IndyTilt = 10, -- toe edge up
+			MelonTilt = 14, -- heel edge up
+			MethodTilt = 38, -- heel edge up, board shown off behind
+			MethodPitch = 14, -- nose up
+			GrabResponsiveness = 11,
+		},
 		CarveArmForward = 0,
 		CarveArmOut = 8,
 		AirArmOut = 18,
@@ -96,6 +142,8 @@ return {
 	LandingCompressionPerImpact = 0.5,
 	MaxLandingCompression = 25,
 	LandingRecovery = 7,
+	-- Minimum knee compression on any snowboard touchdown (also shown for other players)
+	DefaultLandingCrouch = 12,
 	-- Knees absorb terrain: extra crouch per stud/s² of upward acceleration (dips), and the
 	-- legs extend over crests. Clamped and smoothed.
 	AbsorbPerAccel = 0.05,

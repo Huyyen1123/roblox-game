@@ -91,6 +91,9 @@ local function localInput()
 		Charge = state.JumpCharge,
 		Steer = state.Steer,
 		Stumble = state.Mode == "Stumbling" or state.Mode == "Wipeout",
+		Press = state.Press,
+		Grab = state.Grab,
+		Speed = state.Speed,
 	}
 end
 
@@ -102,6 +105,8 @@ local function remoteInput(character: Model)
 		Charge = character:GetAttribute("RiderCharge") or 0,
 		Steer = character:GetAttribute("RiderSteer") or 0,
 		Stumble = character:GetAttribute("RiderStumble") == true,
+		Press = character:GetAttribute("RiderPress") or 0,
+		Grab = character:GetAttribute("RiderGrab") or 0,
 	}
 end
 
@@ -114,6 +119,8 @@ local function replicate(input)
 		Air = input.Air,
 		Brake = input.Brake,
 		Stumble = input.Stumble,
+		Press = input.Press,
+		Grab = input.Grab,
 	}
 	local now = os.clock()
 	if now - lastSendTime < 1 / PoseConfig.ReplicationRate then
@@ -126,6 +133,8 @@ local function replicate(input)
 		and lastSent.Air == packet.Air
 		and lastSent.Brake == packet.Brake
 		and lastSent.Stumble == packet.Stumble
+		and lastSent.Press == packet.Press
+		and lastSent.Grab == packet.Grab
 	then
 		return
 	end
@@ -162,6 +171,9 @@ local function step(dt: number)
 		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
 			input.Lean = math.asin(math.clamp(root.CFrame.RightVector.Y, -1, 1))
+			-- Spin rate drives the upper body leading a spin; speed sets how deep carves go
+			input.Spin = root.AssemblyAngularVelocity.Y
+			input.Speed = input.Speed or root.AssemblyLinearVelocity.Magnitude
 			local verticalSpeed = root.AssemblyLinearVelocity.Y
 			local previous = lastVerticalSpeed[character]
 			lastVerticalSpeed[character] = verticalSpeed

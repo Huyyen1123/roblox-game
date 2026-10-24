@@ -97,6 +97,7 @@ local function hintList()
 			{ "Tuck", "RT", "Tuck" },
 			{ "Brake", "LT", "Brake" },
 			{ "Jump", "A", "Hold to charge jump" },
+			{ "Grab", "X/B/RB", "Grab (board, in the air)" },
 			{ "Camera", "Y", "Camera" },
 			{ "Reset", "Back", "Reset" },
 		}
@@ -106,6 +107,8 @@ local function hintList()
 		{ "Tuck", "Shift", "Tuck" },
 		{ "Brake", "Ctrl", "Brake" },
 		{ "Jump", "Space", "Hold to charge jump" },
+		{ "Grab", "Q / E / F", "Grab: indy, melon, method" },
+		{ "Press", "W / S", "Nose / tail press (board)" },
 		{ "Camera", "V", "Camera" },
 		{ "Reset", "R", "Reset" },
 	}
@@ -364,6 +367,12 @@ local function update(dt: number)
 	if state.Braking then
 		learned("Brake")
 	end
+	if state.Grab ~= 0 then
+		learned("Grab")
+	end
+	if state.Press ~= 0 then
+		learned("Press")
+	end
 	ridingTime += dt
 	if ridingTime > HINT_TIMEOUT then
 		for action in hints do
@@ -394,13 +403,14 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 	Movement.Jumped:Connect(function()
 		learned("Jump")
 	end)
-	Movement.Landed:Connect(function(quality, _impact, airTime, spin)
+	Movement.Landed:Connect(function(quality, _impact, airTime, spin, grab)
 		local trick = spinName(spin or 0)
-		if airTime < 0.4 and not trick then
+		if airTime < 0.4 and not trick and not grab then
 			return
 		end
 		local word = if quality == "Clean" then "CLEAN" elseif quality == "Sketchy" then "SKETCHY" else "HARD"
-		local message = if trick then `{word} {trick}` else `{word} LANDING`
+		local name = table.concat({ grab or "", trick or "" }, " "):match("^%s*(.-)%s*$")
+		local message = if name ~= "" then `{word} {name}` else `{word} LANDING`
 		showCallout(`{message}  ·  {string.format("%.1f", airTime)}s`, CALLOUT_COLORS[quality])
 	end)
 	Movement.Crashed:Connect(function(reason)

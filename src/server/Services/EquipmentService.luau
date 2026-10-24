@@ -130,6 +130,9 @@ local function buildSkis(character: Model, root: BasePart, model: Model, spec, f
 	end
 end
 
+-- The board hangs off one Motor6D ("BoardJoint") on the HumanoidRootPart; every other board
+-- part is welded to the main Board part. The riding pose drives the joint for presses,
+-- butters and in-air tweaks, and solves both feet onto the bindings wherever the board goes.
 local function buildBoard(root: BasePart, model: Model, spec, footY: number)
 	local thickness = spec.Thickness
 	local y = footY - BASE_DROP + thickness / 2
@@ -138,26 +141,35 @@ local function buildBoard(root: BasePart, model: Model, spec, footY: number)
 	local flat = spec.Length - 2 * kick * math.cos(rad(spec.KickAngle))
 	local center = CFrame.new(0, y, 0)
 
-	attach(root, model, "Board", Vector3.new(spec.Width, thickness, flat), center, spec.Color)
+	local board = newPart(model, "Board", Vector3.new(spec.Width, thickness, flat), spec.Color)
+	board.CFrame = root.CFrame * center
+	Create("Motor6D", { Name = "BoardJoint", Part0 = root, Part1 = board, C0 = center, Parent = board })
+
+	-- Everything else is laid out in root space, then expressed relative to the board
+	local mount = center:Inverse()
+	local function part(name: string, size: Vector3, offset: CFrame, color: Color3)
+		return attach(board, model, name, size, mount * offset, color)
+	end
+
 	-- Wider nose and tail sections (sidecut)
 	local section = flat * 0.2
 	for _, z in { -1, 1 } do
-		attach(root, model, "BoardSection", Vector3.new(spec.NoseWidth, thickness, section), center * CFrame.new(0, 0, z * (flat - section) / 2), spec.Color)
+		part("BoardSection", Vector3.new(spec.NoseWidth, thickness, section), center * CFrame.new(0, 0, z * (flat - section) / 2), spec.Color)
 	end
 	-- Dark base and edges peeking out underneath
-	attach(root, model, "BoardBase", Vector3.new(spec.Width + 0.03, 0.03, flat), center * CFrame.new(0, -thickness / 2 - 0.01, 0), spec.BaseColor)
-	roundedEnd(root, model, "BoardNose", center * CFrame.new(0, 0, -flat / 2), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
-	roundedEnd(root, model, "BoardTail", center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
+	part("BoardBase", Vector3.new(spec.Width + 0.03, 0.03, flat), center * CFrame.new(0, -thickness / 2 - 0.01, 0), spec.BaseColor)
+	roundedEnd(board, model, "BoardNose", mount * center * CFrame.new(0, 0, -flat / 2), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
+	roundedEnd(board, model, "BoardTail", mount * center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
 
 	-- Bindings: baseplate, highback on the heel side, ankle and toe straps.
 	-- Regular stance faces +X (right of travel), so the heel side is -X.
 	local plate = math.max(footY - 0.1 - top, 0.05)
 	for _, z in { -1, 1 } do
 		local bz = z * spec.BindingSpacing / 2
-		attach(root, model, "BindingBase", Vector3.new(1.15, plate, 0.95), CFrame.new(0, top + plate / 2, bz), spec.BindingColor)
-		attach(root, model, "Highback", Vector3.new(0.12, 0.85, 0.85), CFrame.new(-0.6, footY + 0.32, bz) * CFrame.Angles(0, 0, rad(-12)), spec.BindingColor)
-		attach(root, model, "AnkleStrap", Vector3.new(0.5, 0.1, 1.12), CFrame.new(-0.12, footY + 0.42, bz), spec.StrapColor)
-		attach(root, model, "ToeStrap", Vector3.new(0.22, 0.08, 1.1), CFrame.new(0.42, footY + 0.25, bz), spec.StrapColor)
+		part("BindingBase", Vector3.new(1.15, plate, 0.95), CFrame.new(0, top + plate / 2, bz), spec.BindingColor)
+		part("Highback", Vector3.new(0.12, 0.85, 0.85), CFrame.new(-0.6, footY + 0.32, bz) * CFrame.Angles(0, 0, rad(-12)), spec.BindingColor)
+		part("AnkleStrap", Vector3.new(0.5, 0.1, 1.12), CFrame.new(-0.12, footY + 0.42, bz), spec.StrapColor)
+		part("ToeStrap", Vector3.new(0.22, 0.08, 1.1), CFrame.new(0.42, footY + 0.25, bz), spec.StrapColor)
 	end
 end
 

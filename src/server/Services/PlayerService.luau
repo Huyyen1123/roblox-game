@@ -162,6 +162,10 @@ local function onRiderState(player: Player, packet: any)
 	if type(packet.Air) ~= "boolean" or type(packet.Brake) ~= "boolean" or type(packet.Stumble) ~= "boolean" then
 		return
 	end
+	local press, grab = packet.Press, packet.Grab
+	if type(press) ~= "number" or type(grab) ~= "number" then
+		return
+	end
 	local character = player.Character
 	if not character or not player:GetAttribute(Attributes.Sport) then
 		return
@@ -173,6 +177,8 @@ local function onRiderState(player: Player, packet: any)
 	character:SetAttribute("RiderAir", packet.Air)
 	character:SetAttribute("RiderBrake", packet.Brake)
 	character:SetAttribute("RiderStumble", packet.Stumble)
+	character:SetAttribute("RiderPress", math.clamp(math.round(press), -1, 1))
+	character:SetAttribute("RiderGrab", math.clamp(math.round(grab), 0, 3))
 end
 
 local function onRequestReset(player: Player)

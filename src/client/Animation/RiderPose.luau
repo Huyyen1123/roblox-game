@@ -35,6 +35,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Constants = require(ReplicatedStorage.Shared.Constants)
 local PoseConfig = require(ReplicatedStorage.Shared.Config.PoseConfig)
 local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
@@ -63,6 +64,9 @@ local JOINTS = {
 }
 
 local EASED = { "Crouch", "Torso", "ArmForward", "Elbow", "ArmOut", "Wrist", "Turn", "Absorb" }
+-- Snowboard-only channels (stay at 0 for skis)
+local BOARD_EASED = { "Edge", "Press", "Spin", "AirTilt", "Lift" }
+local GRABS = { "Indy", "Melon", "Method" }
 
 -- Legs never straighten past this share of their length (keeps the knee solution stable)
 local MAX_REACH = 0.995
@@ -80,6 +84,20 @@ end
 
 local function lerp(a: number, b: number, t: number): number
 	return a + (b - a) * t
+end
+
+local function armData(joints, side: string)
+	local shoulderC0, shoulderC1 = jointFrames(joints[side .. "Shoulder"])
+	local elbowC0, elbowC1 = jointFrames(joints[side .. "Elbow"])
+	local wristC0 = jointFrames(joints[side .. "Wrist"])
+	return {
+		Shoulder = joints[side .. "Shoulder"],
+		Elbow = joints[side .. "Elbow"],
+		Wrist = joints[side .. "Wrist"],
+		ShoulderC0 = shoulderC0,
+		Upper = (shoulderC1.Position - elbowC0.Position).Magnitude,
+		Lower = (elbowC1.Position - wristC0.Position).Magnitude,
+	}
 end
 
 local function legData(joints, side: string)
@@ -130,19 +148,35 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 	for _, key in EASED do
 		current[key] = 0
 	end
+	for _, key in BOARD_EASED do
+		current[key] = 0
+	end
+	for _, key in GRABS do
+		current[key] = 0
+	end
 	local rootC0, rootC1 = jointFrames(joints.Root)
+	local waistC0, waistC1 = jointFrames(joints.Waist)
 	local left, right = legData(joints, "Left"), legData(joints, "Right")
+	local equipment = sport.Equipment
 
 	return setmetatable({
 		Joints = joints,
 		Legs = { Left = left, Right = right },
+		Arms = { [-1] = armData(joints, "Left"), [1] = armData(joints, "Right") },
 		RootC0 = rootC0,
 		RootC1 = rootC1,
+		WaistC0 = waistC0,
+		WaistC1 = waistC1,
+		Character = character,
+		IsBoard = equipment.Kind == "Board",
+		BoardFlat = if equipment.Kind == "Board"
+			then equipment.Length - 2 * equipment.KickLength * math.cos(math.rad(equipment.KickAngle))
+			else 0,
 		LegLength = left.Thigh + left.Shin,
 		-- Height of a foot's centre (root space) when its sole is on the snow / binding
 		FootCenterY = -CharacterUtil.GetFootOffset(character) + footPart.Size.Y / 2,
 		RestFootZ = (leftFoot.Position.Z + rightFoot.Position.Z) / 2,
-		Equipment = sport.Equipment,
+		Equipment = equipment,
 		Style = style,
 		-- Regular stance leads with the left foot: the body faces right of the travel direction.
 		StanceSign = if stance == "Goofy" then 1 else -1,
@@ -156,6 +190,7 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		WasAir = false,
 		LastCharge = 0,
 		Lean = 0,
+		Air = false,
 	}, RiderPose)
 end
 
@@ -198,6 +233,11 @@ function RiderPose:Update(dt: number, input)
 	if input.Air and not self.WasAir and self.LastCharge > 0.05 then
 		self.PopTime = 0
 	end
+	-- Snowboard touchdown: knees absorb (other players' riders have no local Landed event)
+	if style.Board and self.WasAir and not input.Air then
+		self.LandingCrouch = math.max(self.LandingCrouch, PoseConfig.DefaultLandingCrouch)
+	end
+	self.Air = input.Air
 	self.WasAir = input.Air
 	self.LastCharge = charge
 	local popping = self.PopTime < PoseConfig.PopDuration
@@ -211,6 +251,24 @@ function RiderPose:Update(dt: number, input)
 		crouch = math.max(crouch, style.AirCrouch)
 	end
 	crouch += style.ChargeCrouch * charge + self.LandingCrouch
+
+	-- Snowboard: toe/heel carve depth grows with speed; presses and grabs
+	local board = style.Board
+	local edge, press, grabTargets = 0, 0, { Indy = 0, Melon = 0, Method = 0 }
+	if board then
+		local depth = math.clamp((input.Speed or 0) / board.CarveFullSpeed, board.CarveMinDepth, 1)
+		-- Regular riders face right of travel, so a right turn is on the toe edge
+		edge = if input.Air then 0 else steer * -self.StanceSign * depth
+		press = if input.Air then 0 else math.clamp(input.Press or 0, -1, 1)
+		local grab = if input.Air then GRABS[input.Grab or 0] else nil
+		if grab then
+			grabTargets[grab] = 1
+		end
+		crouch += math.max(edge, 0) * board.ToeCrouch + math.max(-edge, 0) * board.HeelCrouch + math.abs(press) * board.PressCrouch
+		if grab then
+			crouch += board.GrabCrouch
+		end
+	end
 	if popping then
 		crouch = style.PopCrouch
 	end
@@ -236,6 +294,14 @@ function RiderPose:Update(dt: number, input)
 		Wrist = lerp(style.Wrist, style.TuckWrist, tuck),
 		Turn = if input.Air then 0 else steer,
 		Absorb = absorb,
+		Edge = edge,
+		Press = press,
+		Spin = if input.Air then input.Spin or 0 else 0,
+		AirTilt = if input.Air then steer else 0,
+		Lift = if input.Air then 1 else 0,
+		Indy = grabTargets.Indy,
+		Melon = grabTargets.Melon,
+		Method = grabTargets.Method,
 	}
 
 	-- Ease toward targets so states blend instead of snapping
@@ -251,6 +317,15 @@ function RiderPose:Update(dt: number, input)
 	for _, key in EASED do
 		local rate = if key == "Absorb" then absorbAlpha else alpha
 		current[key] += (targets[key] - current[key]) * rate
+	end
+	if board then
+		for _, key in BOARD_EASED do
+			current[key] += (targets[key] - current[key]) * alpha
+		end
+		local grabAlpha = 1 - math.exp(-board.GrabResponsiveness * dt)
+		for _, key in GRABS do
+			current[key] += (targets[key] - current[key]) * grabAlpha
+		end
 	end
 
 	self:Apply()
@@ -278,16 +353,18 @@ function RiderPose:FootTargets(): (CFrame, CFrame)
 	return CFrame.new(leftX, y - leftX * slope, z), CFrame.new(rightX, y - rightX * slope, z)
 end
 
--- Two-bone IK: joint transforms that put this leg's foot exactly at footTarget (root space).
-local function solveLeg(leg, lowerTorso: CFrame, footTarget: CFrame)
-	local hipPivot = lowerTorso * leg.HipC0
-	local ankleTarget = (footTarget * leg.AnkleC1).Position
-	local toAnkle = hipPivot:PointToObjectSpace(ankleTarget)
-	local thigh, shin = leg.Thigh, leg.Shin
-	local reach = math.clamp(toAnkle.Magnitude, math.abs(thigh - shin) + 1e-3, (thigh + shin) * MAX_REACH)
+--[[
+	Two-bone IK. pivot is the first joint's frame (before its Transform); target is where the
+	end joint's pivot must be, in the same space as pivot. Returns the Transforms for the first
+	and middle joints. bendSign 1 bends like a knee (thigh forward, shin back); -1 bends like an
+	elbow (upper arm back, forearm forward).
+]]
+local function solveTwoBone(pivot: CFrame, target: Vector3, upper: number, lower: number, bendSign: number): (CFrame, CFrame)
+	local toEnd = pivot:PointToObjectSpace(target)
+	local reach = math.clamp(toEnd.Magnitude, math.abs(upper - lower) + 1e-3, (upper + lower) * MAX_REACH)
 
-	-- Aim the leg's rest axis (-Y) at the ankle target, keeping the knee pointing forward
-	local up = -toAnkle.Unit
+	-- Aim the limb's rest axis (-Y) at the target, keeping the bend in the forward/back plane
+	local up = -toEnd.Unit
 	local back = Vector3.zAxis - up * up.Z
 	if back.Magnitude < 1e-3 then
 		back = Vector3.xAxis:Cross(up)
@@ -295,13 +372,18 @@ local function solveLeg(leg, lowerTorso: CFrame, footTarget: CFrame)
 	back = back.Unit
 	local aim = CFrame.fromMatrix(Vector3.zero, up:Cross(back), up, back)
 
-	-- Law of cosines: thigh swings forward from the aim line, knee bends back to meet the target
-	local hipAngle = math.acos(math.clamp((thigh * thigh + reach * reach - shin * shin) / (2 * thigh * reach), -1, 1))
-	local kneeInner = math.acos(math.clamp((thigh * thigh + shin * shin - reach * reach) / (2 * thigh * shin), -1, 1))
-	local hipT = aim * CFrame.Angles(hipAngle, 0, 0)
-	local kneeT = CFrame.Angles(-(math.pi - kneeInner), 0, 0)
+	-- Law of cosines
+	local firstAngle = math.acos(math.clamp((upper * upper + reach * reach - lower * lower) / (2 * upper * reach), -1, 1))
+	local middleInner = math.acos(math.clamp((upper * upper + lower * lower - reach * reach) / (2 * upper * lower), -1, 1))
+	return aim * CFrame.Angles(bendSign * firstAngle, 0, 0), CFrame.Angles(-bendSign * (math.pi - middleInner), 0, 0)
+end
 
-	-- Ankle: turn the foot to the target orientation (flat in the binding)
+-- Puts this leg's foot exactly at footTarget (root space), flat in its binding.
+local function solveLeg(leg, lowerTorso: CFrame, footTarget: CFrame)
+	local hipPivot = lowerTorso * leg.HipC0
+	local hipT, kneeT = solveTwoBone(hipPivot, (footTarget * leg.AnkleC1).Position, leg.Thigh, leg.Shin, 1)
+
+	-- Ankle: turn the foot to the target orientation
 	local thighFrame = hipPivot * hipT * leg.HipC1:Inverse()
 	local shinFrame = thighFrame * leg.KneeC0 * kneeT * leg.KneeC1:Inverse()
 	local ankleT = ((shinFrame * leg.AnkleC0):Inverse() * footTarget * leg.AnkleC1).Rotation
@@ -322,6 +404,10 @@ local function requiredDrop(leg, restLowerTorso: CFrame, footTarget: CFrame): nu
 end
 
 function RiderPose:Apply()
+	if self.IsBoard then
+		self:ApplyBoard()
+		return
+	end
 	local joints = self.Joints
 	local style = self.Style
 	local current = self.Current
@@ -377,12 +463,158 @@ function RiderPose:Apply()
 	arm(joints.RightShoulder, joints.RightElbow, joints.RightWrist, 1, rightPlant)
 end
 
+-- The board's joint on the root (EquipmentService), re-found when the gear is rebuilt.
+function RiderPose:BoardJoint(): Motor6D?
+	local joint = self.BoardJointCache
+	if joint and joint.Parent then
+		return joint
+	end
+	local equipment = self.Character:FindFirstChild(Constants.EquipmentModelName)
+	local board = equipment and equipment:FindFirstChild("Board")
+	joint = board and board:FindFirstChild("BoardJoint") :: Motor6D?
+	self.BoardJointCache = joint
+	return joint
+end
+
+--[[
+	Snowboard pose. The board can move on its joint (presses, butters, air tweaks, grabs) and
+	the feet are solved onto its bindings wherever it goes. Toe-side carves drive the hips and
+	knees over the toes with the chest folded forward; heel-side carves sit low and back with
+	the shoulders open down the hill and the rear hand sweeping toward the snow. In the air the
+	board comes up to the rider, the upper body leads spins, and grabs reach the hand to the
+	board edge with arm IK.
+]]
+function RiderPose:ApplyBoard()
+	local joints = self.Joints
+	local style = self.Style
+	local cfg = style.Board
+	local current = self.Current
+	local spec = self.Equipment
+	local rad = math.rad
+	local t = self.Clock
+	local stance = self.StanceSign
+	local toeSign = -stance -- regular faces +X: toes toward +X, nose on the body's left
+	local edge = current.Edge
+	local toe, heel = math.max(edge, 0), math.max(-edge, 0)
+	local press = current.Press
+	local indy, melon, method = current.Indy, current.Melon, current.Method
+	local grab = math.min(indy + melon + method, 1)
+	local idle = if self.Air then 0 else 1
+
+	-- Board tweak (board space). Presses pivot on the end that stays on the snow and butter
+	-- with steering; in the air the board rises to the body and tilts with steering and grabs.
+	local half = self.BoardFlat / 2
+	local pivot = CFrame.new(0, -spec.Thickness / 2, if press >= 0 then -half else half)
+	local butter = rad(cfg.ButterYaw) * -current.Turn * math.abs(press)
+	local pressRot = pivot * CFrame.Angles(0, butter, 0) * CFrame.Angles(-rad(cfg.PressAngle) * press, 0, 0) * pivot:Inverse()
+	local roll = toeSign * rad(cfg.IndyTilt * indy - cfg.MelonTilt * melon - cfg.MethodTilt * method)
+		- rad(cfg.AirTilt) * current.AirTilt
+	local lift = cfg.AirLift * current.Lift + cfg.GrabLift * grab
+	local tweak = CFrame.new(0, lift, 0)
+		* CFrame.Angles(rad(cfg.MethodPitch) * method, 0, 0)
+		* CFrame.Angles(0, 0, roll)
+		* pressRot
+
+	local boardJoint = self:BoardJoint()
+	local boardC0 = if boardJoint then boardJoint.C0 else CFrame.identity
+	if boardJoint then
+		boardJoint.Transform = tweak
+	else
+		tweak = CFrame.identity
+	end
+	local boardFrame = boardC0 * tweak
+
+	-- Feet: across the board in the bindings, wherever the board is
+	local bodyYaw = CFrame.Angles(0, rad(style.StanceYaw) * stance, 0)
+	local leftZ = stance * spec.BindingSpacing / 2
+	local function onBoard(rest: CFrame): CFrame
+		return boardFrame * (boardC0:Inverse() * rest)
+	end
+	local leftTarget = onBoard(CFrame.new(0, self.FootCenterY, leftZ) * bodyYaw)
+	local rightTarget = onBoard(CFrame.new(0, self.FootCenterY, -leftZ) * bodyYaw)
+
+	-- Pelvis: over the toes or back over the heels, toward a pressed end, with a slow sway
+	local toeDir = bodyYaw.LookVector
+	local shift = toeDir * (toe * cfg.ToeHipShift - heel * cfg.HeelHipShift + idle * 0.04 * math.sin(t * 1.3))
+		+ Vector3.new(0, 0, -press * cfg.PressHipShift)
+	local planar = CFrame.new(shift.X, 0, shift.Z)
+	local restLowerTorso = self.RootC0 * planar * bodyYaw * self.RootC1:Inverse()
+	local knees = current.Crouch + current.Absorb + idle * cfg.IdleKnee * (math.sin(t * 1.8) + 0.5 * math.sin(t * 2.9 + 1))
+	local crouchDrop = self.LegLength * (1 - math.cos(rad(math.clamp(knees, 0, 75))))
+	local drop = math.max(
+		crouchDrop,
+		requiredDrop(self.Legs.Left, restLowerTorso, leftTarget),
+		requiredDrop(self.Legs.Right, restLowerTorso, rightTarget)
+	)
+	local rootT = CFrame.new(shift.X, -drop, shift.Z) * bodyYaw
+	joints.Root.Transform = rootT
+	local lowerTorso = self.RootC0 * rootT * self.RootC1:Inverse()
+	solveLeg(self.Legs.Left, lowerTorso, leftTarget)
+	solveLeg(self.Legs.Right, lowerTorso, rightTarget)
+
+	-- Upper body: shoulders toward the nose (more on heel-side), the chest leads spins
+	local spinLead = math.clamp(current.Spin * cfg.SpinLead, -cfg.MaxSpinLead, cfg.MaxSpinLead)
+	local open = cfg.ShoulderOpen + toe * cfg.ToeShoulderOpen + heel * cfg.HeelShoulderOpen
+	local waistYaw = rad(open) * toeSign + rad(spinLead)
+	local torsoPitch = rad(current.Torso + toe * cfg.ToeTorso + heel * cfg.HeelTorso + grab * cfg.GrabTorso)
+	local sway = rad(cfg.IdleSway * idle * math.sin(t * 1.3))
+	local waistT = CFrame.Angles(0, waistYaw, 0) * CFrame.Angles(-torsoPitch, 0, sway)
+	joints.Waist.Transform = waistT
+	-- Head keeps looking along the travel direction, spotting ahead in spins
+	local headYaw = -rad(style.HeadYaw) * stance - waistYaw + rad(spinLead) * 0.5
+	joints.Neck.Transform = CFrame.Angles(0, headYaw, 0) * CFrame.Angles(torsoPitch * style.NeckCompensation, 0, 0)
+
+	-- Arms: balance poses for each edge, tucked in fast spins, then grabs blend in with IK
+	local frontSide = if stance < 0 then -1 else 1 -- regular leads with the left
+	local spinTuck = math.min(math.abs(current.Spin) / 8, 1)
+	local upperTorso = lowerTorso * self.WaistC0 * waistT * self.WaistC1:Inverse()
+	local grabZ = spec.BindingSpacing * 0.15
+	for _, side in { -1, 1 } do
+		local arm = self.Arms[side]
+		local isFront = side == frontSide
+		local forward = current.ArmForward + idle * cfg.IdleArm * math.sin(t * 1.1 + side) + toe * cfg.ToeArmForward + spinTuck * 10
+		local out = current.ArmOut - spinTuck * cfg.SpinArmTuck + math.abs(press) * 12
+		local elbow = current.Elbow + spinTuck * 15
+		if isFront then
+			out += heel * cfg.HeelFrontArmOut + indy * 25
+		else
+			forward -= heel * cfg.HeelRearArmBack
+			out += melon * 30 + method * 40
+			forward -= method * 30
+		end
+		local shoulderT = CFrame.Angles(0, 0, side * rad(out)) * CFrame.Angles(rad(forward), 0, 0)
+		local elbowT = CFrame.Angles(rad(elbow), 0, 0)
+		local wristT = CFrame.Angles(rad(current.Wrist), 0, 0)
+
+		-- Grab: indy is the rear hand on the toe edge; melon and method the front hand on the heel edge
+		local weight = if isFront then melon + method else indy
+		if weight > 0.01 then
+			local edgeX = (if isFront then -toeSign else toeSign) * spec.Width / 2
+			local grip = (boardFrame * CFrame.new(edgeX, spec.Thickness / 2 + 0.1, if isFront then -grabZ else grabZ)).Position
+			local shoulderPivot = upperTorso * arm.ShoulderC0
+			local wristTarget = grip + (shoulderPivot.Position - grip).Unit * 0.3
+			local grabShoulder, grabElbow = solveTwoBone(shoulderPivot, wristTarget, arm.Upper, arm.Lower, -1)
+			weight = math.min(weight, 1)
+			shoulderT = shoulderT:Lerp(grabShoulder, weight)
+			elbowT = elbowT:Lerp(grabElbow, weight)
+			wristT = wristT:Lerp(CFrame.identity, weight)
+		end
+		arm.Shoulder.Transform = shoulderT
+		arm.Elbow.Transform = elbowT
+		arm.Wrist.Transform = wristT
+	end
+end
+
 -- Returns the character to its default pose (when riding stops).
 function RiderPose:Reset()
 	for _, joint in self.Joints do
 		if joint.Parent then
 			joint.Transform = CFrame.identity
 		end
+	end
+	local boardJoint = self.BoardJointCache
+	if boardJoint and boardJoint.Parent then
+		boardJoint.Transform = CFrame.identity
 	end
 end
 

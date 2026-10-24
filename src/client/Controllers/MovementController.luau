@@ -48,7 +48,7 @@ local MovementController = {}
 MovementController.Activated = Signal.new()
 MovementController.Deactivated = Signal.new()
 MovementController.ModeChanged = Signal.new() -- (newMode, oldMode)
-MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime, spinDegrees)
+MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime, spinDegrees, grabName?)
 MovementController.Stumbled = Signal.new() -- (reason: "Landing" | "Bump" | "Recovery")
 MovementController.Crashed = Signal.new() -- wipeout (reason: "Collision" | "BadLanding")
 MovementController.Jumped = Signal.new() -- (charge: number 0..1)
@@ -72,6 +72,10 @@ local state = {
 	AirTime = 0,
 	SpinRate = 0, -- radians/s of airborne yaw (A/D in the air)
 	AirSpin = 0, -- radians spun since leaving the ground (signed)
+	-- Snowboard style inputs (pose only; no effect on speed)
+	Press = 0, -- 1 nose press, -1 tail press, 0 none (on the snow)
+	Grab = 0, -- 0 none, 1 indy, 2 melon, 3 method (in the air)
+	AirGrab = nil :: string?, -- grab held long enough to count in this jump
 	SlopeAngle = 0,
 	CoastDeceleration = 0,
 	Root = nil :: BasePart?,
@@ -174,6 +178,10 @@ end
 -- Step
 ----------------------------------------------------------------------------------------------
 
+local GRAB_NAMES = { "INDY", "MELON", "METHOD" }
+local GRAB_COUNT_TIME = 0.25
+local grabHeldTime = 0
+
 local function readIntent(dt: number)
 	local canAct = wipeoutTimer <= 0
 	local steady = canAct and stumbleTimer <= 0
@@ -185,6 +193,37 @@ local function readIntent(dt: number)
 	state.Tuck = math.clamp(state.Tuck + math.sign(tuckTarget - state.Tuck) * dt / tuckTime, 0, 1)
 	state.Tucking = state.Tuck > 0.5
 	state.Braking = canAct and Input.IsHeld("Brake")
+
+	-- Presses on the snow (W only presses above push speed, so it still pushes off the start)
+	local press = 0
+	if steady and state.Grounded then
+		if Input.IsHeld("TailPress") then
+			press = -1
+		elseif Input.IsHeld("Push") and state.Speed > Config.Push.MaxSpeed then
+			press = 1
+		end
+	end
+	state.Press = press
+	-- Grabs in the air; one held for GrabCountTime counts toward the landing callout
+	local grab = 0
+	if canAct and not state.Grounded then
+		if Input.IsHeld("GrabMethod") then
+			grab = 3
+		elseif Input.IsHeld("GrabMelon") then
+			grab = 2
+		elseif Input.IsHeld("GrabIndy") then
+			grab = 1
+		end
+	end
+	if grab ~= 0 and grab == state.Grab then
+		grabHeldTime += dt
+		if grabHeldTime >= GRAB_COUNT_TIME then
+			state.AirGrab = GRAB_NAMES[grab]
+		end
+	else
+		grabHeldTime = 0
+	end
+	state.Grab = grab
 
 	return {
 		Steer = state.Steer * (if stumbleTimer > 0 then Config.Stumble.SteerMultiplier else 1),
@@ -233,7 +272,7 @@ local function touchDown(normal: Vector3)
 	if result.Heading then
 		state.Heading = result.Heading
 	end
-	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)))
+	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)), state.AirGrab)
 	if result.Stumble then
 		startStumble("Landing")
 	end
@@ -380,6 +419,7 @@ local function step(dt: number)
 		state.AirTime = 0
 		state.SpinRate = 0
 		state.AirSpin = 0
+		state.AirGrab = nil
 		state.SlopeAngle = math.deg(math.acos(math.clamp(ground.Normal.Y, -1, 1)))
 		command = Physics.Grounded(state, ground, intent, stats, Config, rideHeight, dt)
 	else

@@ -6,7 +6,7 @@
 
 	- Steer: axis from keys, the left stick, the default mobile thumbstick (when the place has
 	  a PlayerModule) or touch buttons.
-	- Held actions (Tuck, Brake, Push) and discrete actions (Jump, camera, reset, zoom) are bound
+	- Held actions (Tuck, Brake, Push, presses, grabs) and discrete actions (Jump, camera, reset, zoom) are bound
 	  through ContextActionService only while riding, at high priority, so they override the
 	  default humanoid jump and shift-lock.
 	- Jump reports press and release separately so the movement code can charge jumps.
@@ -225,6 +225,10 @@ function InputController.IsHeld(name: string): boolean
 		end
 		local c = getControls()
 		if c and UserInputService.TouchEnabled and c:GetMoveVector().Z < -InputConfig.StickPushThreshold then
+			return true
+		end
+	elseif name == "TailPress" then
+		if gamepadMove.Y < -InputConfig.StickPushThreshold then
 			return true
 		end
 	end
