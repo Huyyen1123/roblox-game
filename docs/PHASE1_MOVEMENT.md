@@ -4,19 +4,31 @@ Status: implemented and tested in Studio, awaiting approval. Baseline: tag `phas
 
 ## What changed
 
-### Speed calibration
+### Speed calibration (retuned after your first playtest)
 
-The prototype ran at about 127 km/h and could reach about 222 km/h. Movement is now tuned to the
-spec's targets. On-snow gravity, drag and friction were retuned; the speedometer was already
-correct (1 stud = 0.28 m, so studs/s × 1.008 = km/h). Air gravity stays at 110 so jumps don't
-float.
+The first Phase 1 tuning (25 / 40 / 48 / 55 km/h) felt too slow. It's now retuned to the faster
+targets you gave, calibrated against the course's real slopes (9°–24°). On-snow gravity went
+from 60 to 68, drag from 0.0142 to 0.0097, and the cap to 70 km/h. The speedometer conversion
+was already correct (1 stud = 0.28 m, so studs/s × 1.008 = km/h).
 
-| Target | Measured (Studio test lanes) |
-|---|---|
-| Cruising ~25 km/h (10° slope, untucked) | **24.7 km/h** |
-| Racing 38–40 km/h (24° slope, untucked) | **40.3 km/h** |
-| Tucking ~48 km/h (24° slope) | **48.6 km/h** |
-| Cap ~55 km/h | `MaxSpeed = 54.5` studs/s (54.9 km/h) |
+| Target | Measured (Studio test lanes) | Notes |
+|---|---|---|
+| Cruising 35–40 km/h | 32.0 km/h on 10° (the mellowest course slope) | 37–39 km/h on the course's typical 13–14° (calculated) |
+| Racing 45–55 km/h | **51.8 km/h** on 24°, untucked | about 45 on 18° (calculated) |
+| Tucking 60–65 km/h | **62.1 km/h** on 24° | builds over about 4 s, no jump in speed |
+| Max ~70 km/h | `MaxSpeed = 69.4` studs/s | reachable off jumps and steep drops |
+| Braking | 44 → 0 in **1.9 s** on 24°; 36 → 0 in **1.6 s** on 10° | consistent on every slope (see below) |
+
+Acceleration: 12 to 48 km/h in about 3 s on 24°.
+
+**About the 20 km/h you saw:** that was the real riding speed, not braking. No brake input was
+held. You were on the course's mellow 10° section (z ≈ 630–850), where the old tuning topped out
+at about 25 km/h untucked, and steering drag took it to about 20.
+
+**Frame rate:** Studio was running at **16 FPS** during your test, on battery with Future lighting
+and about 1,000 tree meshes. Low FPS makes any speed feel choppy and slower. Test plugged in, at
+a manual graphics setting. A frame-rate budget for the course is part of Phase 3 and later
+optimisation.
 
 ### Controls (PC)
 
@@ -24,7 +36,7 @@ float.
 |---|---|
 | A / D (or ← / →) | Steer, with smoothed response |
 | **Shift** (hold) | Tuck: eases in over 0.35 s, cuts drag, halves turning |
-| **Ctrl** (hold) | Brake: steady deceleration with a slight sideways skid |
+| **Ctrl** (hold) | Brake: stops in about 2 s from racing speed on any slope, with a slight sideways skid |
 | **Space** | Tap = small hop. Hold = charge (up to 0.55 s), release to jump. |
 | W | Skating push at low speed only (≤ 12 studs/s), e.g. off the start pad |
 | V / R | Camera toggle / reset to start |
@@ -36,7 +48,7 @@ tuck. W/S, A/D and Q/E while airborne are reserved for Phase 4 tricks.
 
 ### Turning
 
-Carving now costs speed instead of gaining it. Two bugs dating back to the prototype made
+Carving costs speed instead of gaining it. Two bugs dating back to the prototype made
 zig-zagging faster than riding straight:
 
 - Sideways gravity was converted into forward speed. The edges now hold it; a little slips
@@ -44,8 +56,22 @@ zig-zagging faster than riding straight:
 - The carve redirect added lost sideways *speed* to forward speed. It now moves kinetic energy,
   so a turn can never add speed.
 
-Measured on the 24° lane: S-turns average 32 km/h (peak 37) against 40 km/h straight. There's
-also a small per-turn drag (`TurnDrag`).
+For the faster tuning, high-speed turning is a little more responsive (`TurnRateHighSpeed` 1.15
+→ 1.3 rad/s, reached at 65 instead of 50 studs/s), and turns cost a bit less speed (`TurnDrag`
+0.3 → 0.22).
+
+### Braking
+
+Braking used to be a fixed deceleration, so with the higher slope gravity it nearly stalled on
+steep slopes and felt grabby on mellow ones. It's now a fixed force (16 studs/s²) **plus a hold
+that cancels the slope's downhill pull** (`Brake.SlopeHold = 1`). Ctrl therefore stops you in
+about the same 1.5–2 s anywhere.
+
+### Input robustness
+
+If the Studio or Roblox window lost focus while a key was held (Cmd+Shift+4, alt-tab), the
+release never arrived, so Shift stayed "held" and the tuck stayed on. Held actions now re-check
+the live key state every frame and clear when the window loses focus.
 
 ### Landings, bumps and wipeouts (no ragdolls)
 
@@ -96,9 +122,9 @@ Code: `server/Dev/TestSlopes.luau`, `server/Dev/DevService.luau`, `client/Dev/De
 
 Run `rojo serve` and connect the plugin, press Play, pick a sport.
 
-1. **F7** → 10° lane. Push with W, then let go. The speedometer settles at about 25.
-2. **F7 F7** → 24° lane. Coast: it settles at about 40. Hold Shift: it eases up to about 48.
-3. On the 24° lane at speed, hold **Ctrl**: a smooth stop in about 4 s.
+1. **F7** → 10° lane. Push with W, then let go. The speedometer settles at about 32.
+2. **F7 F7** → 24° lane. Coast: it settles at about 52. Hold Shift: it eases up to about 62.
+3. On any lane at speed, hold **Ctrl**: a smooth stop in about 2 s.
 4. Do S-turns with A/D: speed drops below the straight-line speed and recovers when you
    straighten.
 5. Tap Space: small hop. Hold Space about half a second, then release: bigger jump, clean
@@ -107,17 +133,17 @@ Run `rojo serve` and connect the plugin, press Play, pick a sport.
    recovery.
 7. **F7** → 18° lane and ride into the red post: WIPEOUT, no fling.
 8. **F6** at any point to log speeds and compare with the table above.
-9. **F8** → ride the course: about 25–48 km/h depending on slope and tuck. Rough estimate
-   70–82 s to the finish.
+9. **F8** → ride the course: about 32–62 km/h depending on slope and tuck. Rough estimate
+   55–65 s to the finish.
 
 ## Known limitations / next phases
 
 - **No animations yet:** riders keep the default pose, and the snowboard stance isn't sideways
   (Phase 2).
-- **Course not yet re-timed:** by integrating the new physics along the course profile
-  (estimate, not a playtest), the current course takes about 69 s tucked and 82 s untucked. That
-  is close to the 90 s beginner target; Phase 3 reshapes it and times real runs.
-- **Kicker sizes were designed for the old speeds:** airtime off them is now small (Phase 3).
+- **Course is now shorter than the 90 s target:** at the faster tuning the current course takes
+  about 55 s tucked and 65 s untucked (estimate from integrating the physics along the course
+  profile, not a timed run). Phase 3 lengthens and reshapes it and times real runs.
+- **Kickers are first-pass:** at the new speeds they give modest air; Phase 3 redesigns them.
 - **Not tested on device:** gamepad and touch bindings exist but haven't been tested on hardware.
 - **Rider collisions still off:** racers pass through each other until the hybrid collision
   system (Phase 4).

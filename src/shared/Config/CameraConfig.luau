@@ -22,13 +22,13 @@ return {
 		PitchResponsiveness = 4,
 		DistanceResponsiveness = 4,
 		SpeedDistanceBonus = 5,
-		SpeedForMaxBonus = 55,
+		SpeedForMaxBonus = 70,
 		CollisionRadius = 0.8,
 		OrbitSensitivity = 0.25, -- degrees per pixel
 		MaxOrbitPitch = 60,
 		OrbitReturnDelay = 1.2,
 		OrbitReturnRate = 3,
-		Fov = { Base = 70, Max = 84, SpeedForMax = 55, Responsiveness = 4 },
+		Fov = { Base = 70, Max = 86, SpeedForMax = 70, Responsiveness = 4 },
 	},
 
 	FirstPerson = {
@@ -41,13 +41,13 @@ return {
 		RollFromSteer = 4,
 		BobAmplitude = 0.06,
 		BobFrequency = 9,
-		BobSpeedRef = 45,
+		BobSpeedRef = 60,
 		LookSensitivity = 0.2,
 		MaxLookYaw = 70,
 		MaxLookPitch = 50,
 		LookReturnDelay = 0.8,
 		LookReturnRate = 3,
-		Fov = { Base = 78, Max = 90, SpeedForMax = 55, Responsiveness = 4 },
+		Fov = { Base = 78, Max = 92, SpeedForMax = 70, Responsiveness = 4 },
 	},
 
 	GamepadLookSpeed = 360, -- pixels-equivalent per second at full stick

@@ -195,8 +195,27 @@ function InputController.GetSteer(): number
 	return math.clamp(steer, -1, 1)
 end
 
+-- Clears every held input; used when the window loses focus, because the release events for
+-- keys held at that moment never arrive (e.g. Cmd+Shift+4 or alt-tabbing leaves Shift "down").
+local function releaseAll()
+	for _, holders in heldInputs do
+		table.clear(holders)
+	end
+	if jumpHeld then
+		jumpHeld = false
+		jumpReleaseQueued = false
+	end
+end
+
 function InputController.IsHeld(name: string): boolean
-	if next(heldInputs[name]) ~= nil then
+	local holders = heldInputs[name]
+	-- Self-heal keyboard keys whose release was missed: trust the live key state.
+	for key in holders do
+		if typeof(key) == "EnumItem" and not string.find(key.Name, "^Button") and not UserInputService:IsKeyDown(key) then
+			holders[key] = nil
+		end
+	end
+	if next(holders) ~= nil then
 		return true
 	end
 	-- Analog alternatives
@@ -248,6 +267,8 @@ function InputController.ConsumeZoom(): number
 end
 
 function InputController.Start()
+	UserInputService.WindowFocusReleased:Connect(releaseAll)
+
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if input.UserInputType == Enum.UserInputType.MouseButton2 and not processed then
 			rightMouseDown = true

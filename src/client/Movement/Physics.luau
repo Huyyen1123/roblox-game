@@ -93,7 +93,9 @@ function Physics.Grounded(state, ground, intent, stats, config, rideHeight: numb
 		+ config.SnowFriction * gravity * normal.Y
 		+ config.TurnDrag * math.abs(intent.Steer) * speed
 	if intent.Brake then
-		deceleration += config.Brake.Deceleration
+		-- Fixed braking force plus a hold that cancels the slope's downhill pull, so braking
+		-- stops the rider in about the same time on a steep or a mellow slope.
+		deceleration += config.Brake.Deceleration + config.Brake.SlopeHold * math.max(slopeGravity:Dot(forward), 0)
 	end
 	if intent.Coast then
 		deceleration += state.CoastDeceleration or 0
