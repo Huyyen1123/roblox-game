@@ -1,8 +1,9 @@
 --[[
 	EquipmentService
-	Attaches placeholder skis or a snowboard under the character's feet.
-	Parts are welded to the HumanoidRootPart (not the feet) so they stay flat regardless of
-	animations; Phase 2 animation work can move them onto the feet.
+	Attaches placeholder skis or a snowboard under the character's feet, plus ski poles.
+	Skis and board are welded to the HumanoidRootPart so they stay flat on the snow (the riding
+	pose keeps the feet planted on them). Poles are welded into the hands, so they follow the
+	client-side arm pose: trailing while riding, tucked under the arms, planting on turns.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -51,6 +52,43 @@ local function buildSkis(root: BasePart, model: Model, spec, footY: number)
 	end
 end
 
+-- One ski pole in pole-local space (grip at the origin, shaft running down -Y), welded into
+-- the hand so the shaft points backward from the hand; the riding pose angles it from there.
+local POLE_MOUNT = CFrame.new(0, -0.1, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+
+local function polePart(hand: BasePart, model: Model, name: string, length: number, diameter: number, centerY: number, color: Color3, material: Enum.Material)
+	-- Cylinders run along X, so rotate them to run along the pole (Y)
+	local localFrame = CFrame.new(0, centerY, 0) * CFrame.Angles(0, 0, math.rad(90))
+	local part = Create("Part", {
+		Name = name,
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(length, diameter, diameter),
+		CFrame = hand.CFrame * POLE_MOUNT * localFrame,
+		Color = color,
+		Material = material,
+		Massless = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		Parent = model,
+	})
+	Create("Weld", { Part0 = hand, Part1 = part, C0 = POLE_MOUNT * localFrame, Parent = part })
+end
+
+local function buildPoles(character: Model, model: Model, spec)
+	local length = spec.Length
+	for _, handName in { "LeftHand", "RightHand" } do
+		local hand = character:FindFirstChild(handName) :: BasePart?
+		if not hand then
+			continue -- R6 rigs have no hands; skip poles
+		end
+		polePart(hand, model, "PoleGrip", 0.55, 0.24, -0.05, spec.GripColor, Enum.Material.Rubber)
+		polePart(hand, model, "PoleShaft", length - 0.3, 0.1, -0.3 - (length - 0.3) / 2, spec.ShaftColor, Enum.Material.Metal)
+		polePart(hand, model, "PoleBasket", 0.06, 0.45, -(length - 0.35), spec.BasketColor, Enum.Material.SmoothPlastic)
+		polePart(hand, model, "PoleTip", 0.15, 0.06, -length - 0.05, spec.TipColor, Enum.Material.Metal)
+	end
+end
+
 local function buildBoard(root: BasePart, model: Model, spec, footY: number)
 	weldedPart(root, model, "Board", spec.Size, CFrame.new(0, footY, 0), spec.Color)
 	for _, z in { -1, 1 } do
@@ -88,6 +126,9 @@ function EquipmentService.Equip(character: Model, sportId: string)
 
 	if spec.Kind == "Skis" then
 		buildSkis(root, model, spec, footY)
+		if spec.Poles then
+			buildPoles(character, model, spec.Poles)
+		end
 	else
 		buildBoard(root, model, spec, footY)
 	end

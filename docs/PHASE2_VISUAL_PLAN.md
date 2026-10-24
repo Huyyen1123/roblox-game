@@ -1,4 +1,8 @@
-# Phase 2 Plan: Rider Presentation (not started; waiting for Phase 1 approval)
+# Phase 2 Plan: Rider Presentation (in progress)
+
+Done so far: riding stance (skis and snowboard), turning leg motion (inclination, inside/outside
+leg bend, counter-rotation), terrain absorption, ski poles with pole plants. These are
+replicated to other players.
 
 Goal: riding looks and feels like a winter sports game, not a Roblox prototype. Following the
 roadmap, Phase 2 focuses on **the rider and the camera**: posture, animation, equipment and

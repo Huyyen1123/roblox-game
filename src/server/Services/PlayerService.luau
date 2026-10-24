@@ -147,8 +147,8 @@ local function onRiderState(player: Player, packet: any)
 	if type(packet) ~= "table" then
 		return
 	end
-	local tuck, charge = packet.Tuck, packet.Charge
-	if type(tuck) ~= "number" or type(charge) ~= "number" then
+	local tuck, charge, steer = packet.Tuck, packet.Charge, packet.Steer
+	if type(tuck) ~= "number" or type(charge) ~= "number" or type(steer) ~= "number" then
 		return
 	end
 	if type(packet.Air) ~= "boolean" or type(packet.Brake) ~= "boolean" or type(packet.Stumble) ~= "boolean" then
@@ -161,6 +161,7 @@ local function onRiderState(player: Player, packet: any)
 
 	character:SetAttribute("RiderTuck", math.clamp(math.floor(tuck), 0, 10) / 10)
 	character:SetAttribute("RiderCharge", math.clamp(math.floor(charge), 0, 10) / 10)
+	character:SetAttribute("RiderSteer", math.clamp(math.floor(steer), -10, 10) / 10)
 	character:SetAttribute("RiderAir", packet.Air)
 	character:SetAttribute("RiderBrake", packet.Brake)
 	character:SetAttribute("RiderStumble", packet.Stumble)

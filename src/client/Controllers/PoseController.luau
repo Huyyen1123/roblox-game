@@ -27,6 +27,7 @@ local PoseController = {}
 
 local Movement
 local posers: { [Model]: any } = {}
+local lastVerticalSpeed: { [Model]: number } = {}
 local lastSent = nil
 local lastSendTime = 0
 
@@ -99,7 +100,7 @@ local function remoteInput(character: Model)
 		Air = character:GetAttribute("RiderAir") == true,
 		Brake = character:GetAttribute("RiderBrake") == true,
 		Charge = character:GetAttribute("RiderCharge") or 0,
-		Steer = 0,
+		Steer = character:GetAttribute("RiderSteer") or 0,
 		Stumble = character:GetAttribute("RiderStumble") == true,
 	}
 end
@@ -109,6 +110,7 @@ local function replicate(input)
 	local packet = {
 		Tuck = math.floor(input.Tuck * 10 + 0.5),
 		Charge = math.floor(input.Charge * 10 + 0.5),
+		Steer = math.floor(input.Steer * 10 + 0.5),
 		Air = input.Air,
 		Brake = input.Brake,
 		Stumble = input.Stumble,
@@ -120,6 +122,7 @@ local function replicate(input)
 	if lastSent
 		and lastSent.Tuck == packet.Tuck
 		and lastSent.Charge == packet.Charge
+		and lastSent.Steer == packet.Steer
 		and lastSent.Air == packet.Air
 		and lastSent.Brake == packet.Brake
 		and lastSent.Stumble == packet.Stumble
@@ -154,6 +157,15 @@ local function step(dt: number)
 			input = remoteInput(character)
 		end
 
+		-- Vertical acceleration (from the replicated root) lets the knees absorb dips and crests
+		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root then
+			local verticalSpeed = root.AssemblyLinearVelocity.Y
+			local previous = lastVerticalSpeed[character]
+			lastVerticalSpeed[character] = verticalSpeed
+			input.VerticalAccel = if previous and dt > 0 then (verticalSpeed - previous) / dt else 0
+		end
+
 		local poser = ensurePoser(player, character)
 		if poser then
 			seen[character] = true
@@ -164,6 +176,7 @@ local function step(dt: number)
 	for character in posers do
 		if not seen[character] then
 			removePoser(character)
+			lastVerticalSpeed[character] = nil
 		end
 	end
 end

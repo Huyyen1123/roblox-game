@@ -23,7 +23,14 @@ local Sports = {
 			Kind = "Skis",
 			Color = Color3.fromRGB(220, 50, 50),
 			Size = Vector3.new(0.35, 0.18, 6.5),
-			Spacing = 1.0, -- matches R15 hip width so each ski sits under a foot
+			Spacing = 1.3, -- matches the hip-width riding stance so each ski sits under a foot
+			Poles = {
+				Length = 3.8,
+				ShaftColor = Color3.fromRGB(190, 195, 205),
+				GripColor = Color3.fromRGB(30, 30, 35),
+				BasketColor = Color3.fromRGB(25, 25, 28),
+				TipColor = Color3.fromRGB(120, 120, 125),
+			},
 		},
 	},
 	Snowboard = {
