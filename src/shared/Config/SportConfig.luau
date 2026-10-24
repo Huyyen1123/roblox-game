@@ -23,7 +23,7 @@ local Sports = {
 			Kind = "Skis",
 			Color = Color3.fromRGB(220, 50, 50),
 			Size = Vector3.new(0.35, 0.18, 6.5),
-			Spacing = 0.55,
+			Spacing = 1.0, -- matches R15 hip width so each ski sits under a foot
 		},
 	},
 	Snowboard = {

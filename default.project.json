@@ -19,6 +19,9 @@
         },
         "DevTeleport": {
           "$className": "RemoteEvent"
+        },
+        "RiderState": {
+          "$className": "RemoteEvent"
         }
       }
     },

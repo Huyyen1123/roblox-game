@@ -4,22 +4,21 @@ Status: implemented and tested in Studio, awaiting approval. Baseline: tag `phas
 
 ## What changed
 
-### Speed calibration (retuned after your first playtest)
+### Speed calibration (second retune: "make it faster")
 
-The first Phase 1 tuning (25 / 40 / 48 / 55 km/h) felt too slow. It's now retuned to the faster
-targets you gave, calibrated against the course's real slopes (9°–24°). On-snow gravity went
-from 60 to 68, drag from 0.0142 to 0.0097, and the cap to 70 km/h. The speedometer conversion
-was already correct (1 stud = 0.28 m, so studs/s × 1.008 = km/h).
+Tuned twice after your playtests: first to 25/40/48/55 km/h, then to 38/52/62/70, and now
+about 20% faster again. On-snow gravity is 78, drag 0.00782, tuck drag ×0.684, cap 85 km/h.
+The speedometer conversion was always correct (1 stud = 0.28 m, so studs/s × 1.008 = km/h).
 
-| Target | Measured (Studio test lanes) | Notes |
+| Slope | Untucked | Tucked |
 |---|---|---|
-| Cruising 35–40 km/h | 32.0 km/h on 10° (the mellowest course slope) | 37–39 km/h on the course's typical 13–14° (calculated) |
-| Racing 45–55 km/h | **51.8 km/h** on 24°, untucked | about 45 on 18° (calculated) |
-| Tucking 60–65 km/h | **62.1 km/h** on 24° | builds over about 4 s, no jump in speed |
-| Max ~70 km/h | `MaxSpeed = 69.4` studs/s | reachable off jumps and steep drops |
-| Braking | 44 → 0 in **1.9 s** on 24°; 36 → 0 in **1.6 s** on 10° | consistent on every slope (see below) |
+| 10° (mellowest course slope) | ~38 km/h (calculated) | ~46 |
+| 14° (typical course slope) | ~46 (calculated) | ~56 |
+| 24° (steepest) | **61.7 km/h measured** | **74.6 km/h measured** |
+| Cap | — | 85 km/h |
 
-Acceleration: 12 to 48 km/h in about 3 s on 24°.
+Braking still cancels the slope's pull, so Ctrl stops you in about 2 s anywhere. Estimated
+course time is now roughly 45–55 s.
 
 **About the 20 km/h you saw:** that was the real riding speed, not braking. No brake input was
 held. You were on the course's mellow 10° section (z ≈ 630–850), where the old tuning topped out
@@ -85,6 +84,28 @@ the live key state every frame and clear when the window loses focus.
 
 The body stays upright throughout. The constraints keep driving the character, so there's no
 physics tumble or fling. In the post-collision test, sideways displacement was 0 studs.
+
+### Riding stance (added at your request, ahead of Phase 2)
+
+The rider no longer stands upright. `client/Animation/RiderPose.luau` bends the R15 joints every
+frame, and `client/Controllers/PoseController.luau` drives it for every rider:
+
+- **Skis:** knees bent, torso leaning forward, arms forward like holding poles, head up. The tuck
+  goes deep (52° hip flex, 42° torso lean, arms tucked). Brake, air, jump-charge and landing
+  compression change the crouch, and stumbles wobble the arms.
+- **Snowboard:** body turned sideways on the board (regular stance: left foot forward), head
+  looking down the slope, feet over the bindings, arms out for balance.
+- **Feet stay planted:** the hips drop exactly as much as the bent legs lose. Measured: foot
+  bottoms 0.06 studs above the ski and board tops.
+- **Works with both R15 joint types** (Motor6D and the newer AnimationConstraint; Roblox can give
+  the same avatar either). The default idle animation is paused while riding, because it would
+  otherwise override the torso and arms.
+- **Multiplayer:** each rider sends a tiny state update (tuck, brake, air, charge, stumble; only
+  on change, at most 10/s). The server validates it and republishes it as character attributes,
+  so every client poses every rider.
+- **Tuning** is in `shared/Config/PoseConfig.luau`. Skis are now spaced to match hip width.
+- **Not included yet** (Phase 2): equipment models, poles, regular/goofy choice in the UI, and
+  authored animation clips.
 
 ### Code structure
 

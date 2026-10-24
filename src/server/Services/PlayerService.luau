@@ -127,6 +127,45 @@ local function onSelectSport(player: Player, sportId: any)
 	end
 end
 
+-- Riding stance state from a rider's client, republished as character attributes so every
+-- client can pose that rider. Purely cosmetic, but still type- and rate-checked.
+local RIDER_STATE_MAX_PER_SECOND = 20
+local riderStateWindow: { [Player]: { Start: number, Count: number } } = {}
+
+local function onRiderState(player: Player, packet: any)
+	local now = os.clock()
+	local window = riderStateWindow[player]
+	if not window or now - window.Start >= 1 then
+		window = { Start = now, Count = 0 }
+		riderStateWindow[player] = window
+	end
+	window.Count += 1
+	if window.Count > RIDER_STATE_MAX_PER_SECOND then
+		return
+	end
+
+	if type(packet) ~= "table" then
+		return
+	end
+	local tuck, charge = packet.Tuck, packet.Charge
+	if type(tuck) ~= "number" or type(charge) ~= "number" then
+		return
+	end
+	if type(packet.Air) ~= "boolean" or type(packet.Brake) ~= "boolean" or type(packet.Stumble) ~= "boolean" then
+		return
+	end
+	local character = player.Character
+	if not character or not player:GetAttribute(Attributes.Sport) then
+		return
+	end
+
+	character:SetAttribute("RiderTuck", math.clamp(math.floor(tuck), 0, 10) / 10)
+	character:SetAttribute("RiderCharge", math.clamp(math.floor(charge), 0, 10) / 10)
+	character:SetAttribute("RiderAir", packet.Air)
+	character:SetAttribute("RiderBrake", packet.Brake)
+	character:SetAttribute("RiderStumble", packet.Stumble)
+end
+
 local function onRequestReset(player: Player)
 	local now = os.clock()
 	if now - (lastReset[player] or 0) < MovementConfig.ResetCooldown then
@@ -165,8 +204,10 @@ function PlayerService.Init(services)
 
 	Remotes.SelectSport.OnServerEvent:Connect(onSelectSport)
 	Remotes.RequestReset.OnServerEvent:Connect(onRequestReset)
+	Remotes.RiderState.OnServerEvent:Connect(onRiderState)
 
 	Players.PlayerRemoving:Connect(function(player)
+		riderStateWindow[player] = nil
 		lastReset[player] = nil
 		lastSportChange[player] = nil
 		spawnSlots[player] = nil

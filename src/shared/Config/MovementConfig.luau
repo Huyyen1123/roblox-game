@@ -3,12 +3,12 @@
 	Tuning for the downhill controller. Units are studs and seconds; 1 stud = 0.28 m, so
 	studs/s × 1.008 = km/h (see Shared.Util.Units).
 
-	Speed targets (retuned after playtesting, 2026-10-23) and how they're reached on the
-	course's real slopes (9°–24°):
-	  Cruising  35–40 km/h → untucked terminal speed on 13–14° (the typical course slope)
-	  Racing    45–55      → untucked terminal speed on 18–24°
-	  Tucking   60–65      → tucked terminal speed on 22–24°
-	  Hard cap  ~70        → MaxSpeed
+	Speed targets (second retune after playtesting, 2026-10-23: "make it faster") and how
+	they're reached on the course's real slopes (9°–24°):
+	  Cruising  ~38–46 km/h → untucked terminal speed on 10–14° (the typical course slopes)
+	  Racing    ~55–62      → untucked terminal speed on 18–24°
+	  Tucking   ~75         → tucked terminal speed on 24°
+	  Hard cap  ~85         → MaxSpeed
 	Terminal speed solves SlopeGravity·sin θ − friction = drag·v², so slope angle, SlopeGravity,
 	SnowFriction and DragCoefficient together set every number above. Change them together
 	and re-measure on the Studio test lanes (see docs/PHASE1_MOVEMENT.md).
@@ -19,17 +19,17 @@ return {
 	Debug = false,
 
 	-- Gravity along the snow (sets acceleration and terminal speeds on slopes)
-	SlopeGravity = 68,
+	SlopeGravity = 78,
 	-- Gravity while airborne (kept higher so jumps feel weighty, not floaty)
 	AirGravity = 110,
-	MaxSpeed = 69.4, -- 70 km/h
+	MaxSpeed = 84.3, -- 85 km/h
 
 	-- Speed loss on the snow: drag·v² + friction·SlopeGravity·cos θ (+ turning, + braking)
-	DragCoefficient = 0.0097,
+	DragCoefficient = 0.00782,
 	SnowFriction = 0.03,
 
 	Tuck = {
-		DragMultiplier = 0.70, -- 24° terminal: ~52 km/h untucked → ~62 tucked
+		DragMultiplier = 0.684, -- 24° terminal: ~62 km/h untucked → ~75 tucked
 		TurnMultiplier = 0.5,
 		InTime = 0.35, -- seconds to fully settle into the tuck
 		OutTime = 0.2,
@@ -53,7 +53,7 @@ return {
 	-- Turning (radians per second), interpolated from low to high speed
 	TurnRateLowSpeed = 2.4,
 	TurnRateHighSpeed = 1.3,
-	TurnRateSpeedRef = 65,
+	TurnRateSpeedRef = 80,
 	SteerResponse = 9,
 
 	-- Skating push (W) at low speed, e.g. off the start pad
@@ -89,7 +89,7 @@ return {
 
 	-- Visual lean into turns
 	LeanAngle = 18,
-	LeanSpeedRef = 50,
+	LeanSpeedRef = 60,
 
 	Landing = {
 		CleanAngle = 25, -- degrees between facing and travel direction

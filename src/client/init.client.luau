@@ -11,12 +11,14 @@ local UI = script.UI
 local InputController = require(Controllers.InputController)
 local MovementController = require(Controllers.MovementController)
 local CameraController = require(Controllers.CameraController)
+local PoseController = require(Controllers.PoseController)
 local SportSelectUI = require(UI.SportSelectUI)
 local HudUI = require(UI.HudUI)
 
 InputController.Start()
 MovementController.Start(InputController)
 CameraController.Start(MovementController, InputController)
+PoseController.Start(MovementController)
 SportSelectUI.Start()
 HudUI.Start(MovementController, CameraController, SportSelectUI)
 
