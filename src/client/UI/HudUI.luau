@@ -33,6 +33,7 @@ local SportSelect
 local screen: ScreenGui
 local speedLabel: TextLabel
 local barFill: Frame
+local chargeFill: Frame
 local statusLabel: TextLabel
 local cameraLabel: TextLabel
 local callout: TextLabel
@@ -52,11 +53,11 @@ end
 
 local function hintText(): string
 	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-		return "Stick: steer / tuck / brake   ·   Jump   ·   Cam   ·   Reset"
+		return "Stick steer  ·  Tuck  ·  Brake  ·  hold Jump to charge  ·  Cam  ·  Reset"
 	elseif UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled then
-		return "L-Stick steer/tuck/brake  ·  A jump  ·  Y camera  ·  Back reset  ·  R-Stick look"
+		return "L-Stick steer  ·  RT tuck  ·  LT brake  ·  hold A to charge jump  ·  Y camera  ·  Back reset"
 	end
-	return "A/D steer  ·  W tuck  ·  S brake  ·  Space jump  ·  V camera  ·  R reset  ·  RMB look  ·  Wheel zoom"
+	return "A/D steer  ·  Shift tuck  ·  Ctrl brake  ·  hold Space to charge jump  ·  W push  ·  V camera  ·  R reset"
 end
 
 local function build()
@@ -110,6 +111,15 @@ local function build()
 		BackgroundColor3 = Color3.fromRGB(90, 200, 255),
 		Parent = bar,
 	}, { corner(4) })
+	-- Jump charge: a thin amber line under the speed bar, only visible while charging
+	chargeFill = Create("Frame", {
+		Name = "JumpCharge",
+		Position = UDim2.new(0, 0, 1, 2),
+		Size = UDim2.new(0, 0, 0, 3),
+		BackgroundColor3 = Color3.fromRGB(255, 190, 70),
+		BorderSizePixel = 0,
+		Parent = bar,
+	})
 
 	statusLabel = label({
 		Name = "Status",
@@ -197,12 +207,16 @@ local function showCallout(message: string, color: Color3)
 end
 
 local function statusText(state): string
-	if state.Mode == "Crashed" then
-		return "CRASHED"
+	if state.Mode == "Wipeout" then
+		return "WIPEOUT"
+	elseif state.Mode == "Stumbling" then
+		return "STUMBLE"
 	elseif state.Mode == "Frozen" then
 		return "GET READY"
 	elseif not state.Grounded then
 		return "AIRBORNE"
+	elseif state.JumpCharge > 0.05 then
+		return "CHARGING JUMP"
 	elseif state.Braking then
 		return "BRAKING"
 	elseif state.Tucking then
@@ -218,6 +232,7 @@ local function update(dt: number)
 	displayedSpeed += (state.Speed - displayedSpeed) * (1 - math.exp(-12 * dt))
 	speedLabel.Text = tostring(math.floor(Units.StudsPerSecondToKmh(displayedSpeed) + 0.5))
 	barFill.Size = UDim2.fromScale(math.clamp(displayedSpeed / Config.MaxSpeed, 0, 1), 1)
+	chargeFill.Size = UDim2.new(state.JumpCharge, 0, 0, 3)
 	statusLabel.Text = statusText(state)
 end
 
@@ -250,6 +265,11 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 	end)
 	Movement.Crashed:Connect(function(reason)
 		showCallout(if reason == "Collision" then "WIPEOUT!" else "BAD LANDING!", CALLOUT_COLORS.Crash)
+	end)
+	Movement.Stumbled:Connect(function(reason)
+		if reason ~= "Recovery" then
+			showCallout("STUMBLE", CALLOUT_COLORS.Sketchy)
+		end
 	end)
 	Movement.Reset:Connect(function()
 		showCallout("RESET TO START", CALLOUT_COLORS.Info)

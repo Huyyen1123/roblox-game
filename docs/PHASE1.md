@@ -1,5 +1,7 @@
 # Phase 1: Core Movement and Camera Prototype
 
+> **Superseded for movement and controls** by [PHASE1_MOVEMENT.md](PHASE1_MOVEMENT.md) (master-spec Phase 1). This file describes the original prototype; its speeds and controls (W tuck, S brake, tap jump) are out of date.
+
 Project Downhill Phase 1 delivers a playable prototype: a generated Frostpeak test course, a
 ski/snowboard picker, a custom downhill controller with jumps and crashes, third- and first-person
 cameras, a speedometer HUD, and server-validated resets.

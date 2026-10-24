@@ -71,7 +71,7 @@ function ThirdPersonCamera:Update(dt: number, camera: Camera, state, input)
 	end
 
 	-- Base yaw: facing blended toward travel direction once moving
-	if state.Mode ~= "Crashed" then
+	if state.Mode ~= "Wipeout" then
 		local facing = CameraMath.Flat(state.Heading)
 		local travel = CameraMath.Flat(state.Velocity)
 		local target = facing

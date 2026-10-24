@@ -1,13 +1,17 @@
 --[[
 	InputController
-	One place that turns keyboard, gamepad and touch into riding intents.
+	Turns keyboard, gamepad and touch into riding actions. Gameplay code asks for actions
+	("is Tuck held?", "was Jump released?") and never reads keys directly; bindings live in
+	InputConfig.
 
-	- Steering, tuck and brake are axes combined from WASD/arrow keys, the left gamepad stick,
-	  and on touch the default thumbstick (if the PlayerModule exists) or our own buttons.
-	- Discrete actions (jump, camera toggle, reset, zoom) are bound with ContextActionService
-	  only while riding, at high priority so they override the default humanoid jump.
-	- Camera look input (right-mouse drag, right thumbstick, touch swipe) accumulates until the
-	  camera consumes it each frame.
+	- Steer: axis from keys, the left stick, the default mobile thumbstick (when the place has
+	  a PlayerModule) or touch buttons.
+	- Held actions (Tuck, Brake, Push) and discrete actions (Jump, camera, reset, zoom) are bound
+	  through ContextActionService only while riding, at high priority, so they override the
+	  default humanoid jump and shift-lock.
+	- Jump reports press and release separately so the movement code can charge jumps.
+	- Camera look input (right-mouse drag, right stick, touch swipe) accumulates until the camera
+	  consumes it each frame.
 ]]
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -25,19 +29,25 @@ local InputController = {}
 InputController.CameraToggled = Signal.new()
 InputController.ResetRequested = Signal.new()
 
-local STICK_DEADZONE = 0.15
-
 local controls = nil
 local ridingEnabled = false
-local jumpQueued = false
+
+-- Held action name -> set of inputs currently holding it (several keys can share one action)
+local heldInputs: { [string]: { [any]: boolean } } = {}
 local jumpHeld = false
+local jumpReleaseQueued = false
+
 local lookDelta = Vector2.zero
 local zoomDelta = 0
 local gamepadLook = Vector2.zero
 local gamepadMove = Vector2.zero
-local touchMove = { Left = false, Right = false, Tuck = false, Brake = false }
+local touchSteer = { Left = false, Right = false }
 local rightMouseDown = false
 local lookTouch: InputObject? = nil
+
+for name in InputConfig.Held do
+	heldInputs[name] = {}
+end
 
 -- The PlayerModule is optional (some places don't ship it). Never yield here: this runs
 -- inside the physics step.
@@ -67,12 +77,18 @@ local function actionName(name: string): string
 	return "Downhill" .. name
 end
 
-local handlers = {
+local function isDown(state: Enum.UserInputState): boolean
+	return state == Enum.UserInputState.Begin or state == Enum.UserInputState.Change
+end
+
+local actionHandlers = {
 	Jump = function(state: Enum.UserInputState)
 		if state == Enum.UserInputState.Begin then
-			jumpQueued = true
 			jumpHeld = true
 		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			if jumpHeld then
+				jumpReleaseQueued = true
+			end
 			jumpHeld = false
 		end
 	end,
@@ -98,36 +114,38 @@ local handlers = {
 	end,
 }
 
-local function bindActions()
-	for name, action in InputConfig.Actions do
-		local handler = handlers[name]
-		if not handler then
-			continue
-		end
-		ContextActionService:BindActionAtPriority(actionName(name), function(_, state)
-			handler(state)
-			return Enum.ContextActionResult.Sink
-		end, action.TouchButton ~= nil, InputConfig.ActionPriority, table.unpack(action.Keys))
-
-		if action.TouchButton then
-			ContextActionService:SetTitle(actionName(name), action.TouchButton.Title)
-			ContextActionService:SetPosition(actionName(name), action.TouchButton.Position)
-		end
+local function bind(name: string, handler, binding)
+	ContextActionService:BindActionAtPriority(actionName(name), function(_, state, input)
+		handler(state, input)
+		return Enum.ContextActionResult.Sink
+	end, binding.TouchButton ~= nil, InputConfig.ActionPriority, table.unpack(binding.Keys or {}))
+	if binding.TouchButton then
+		ContextActionService:SetTitle(actionName(name), binding.TouchButton.Title)
+		ContextActionService:SetPosition(actionName(name), binding.TouchButton.Position)
 	end
 end
 
--- On-screen steer/tuck/brake buttons, only for touch devices without the default thumbstick.
-local function bindTouchMoveButtons()
-	if not UserInputService.TouchEnabled or getControls() then
-		return
+local function bindActions()
+	for name, binding in InputConfig.Actions do
+		bind(name, actionHandlers[name], binding)
 	end
-	for name, button in InputConfig.TouchMoveButtons do
-		ContextActionService:BindAction(actionName(name), function(_, state)
-			touchMove[name] = state == Enum.UserInputState.Begin or state == Enum.UserInputState.Change
-			return Enum.ContextActionResult.Sink
-		end, true)
-		ContextActionService:SetTitle(actionName(name), button.Title)
-		ContextActionService:SetPosition(actionName(name), button.Position)
+
+	for name, binding in InputConfig.Held do
+		local holders = heldInputs[name]
+		bind(name, function(state, input)
+			-- Touch buttons arrive as one InputObject per press; keys arrive per KeyCode.
+			local key = if input.UserInputType == Enum.UserInputType.Touch then input else input.KeyCode
+			holders[key] = if isDown(state) then true else nil
+		end, binding)
+	end
+
+	-- On-screen steer buttons only for touch devices without the default thumbstick.
+	if UserInputService.TouchEnabled and not getControls() then
+		for name, button in InputConfig.TouchSteerButtons do
+			bind("Steer" .. name, function(state)
+				touchSteer[name] = isDown(state)
+			end, { TouchButton = button })
+		end
 	end
 end
 
@@ -135,9 +153,13 @@ local function unbindActions()
 	for name in InputConfig.Actions do
 		ContextActionService:UnbindAction(actionName(name))
 	end
-	for name in InputConfig.TouchMoveButtons do
+	for name in InputConfig.Held do
 		ContextActionService:UnbindAction(actionName(name))
-		touchMove[name] = false
+		table.clear(heldInputs[name])
+	end
+	for name in InputConfig.TouchSteerButtons do
+		ContextActionService:UnbindAction(actionName("Steer" .. name))
+		touchSteer[name] = false
 	end
 end
 
@@ -146,65 +168,59 @@ function InputController.SetRidingEnabled(enabled: boolean)
 		return
 	end
 	ridingEnabled = enabled
-	jumpQueued = false
 	jumpHeld = false
+	jumpReleaseQueued = false
 	if enabled then
 		bindActions()
-		bindTouchMoveButtons()
 	else
 		unbindActions()
 	end
 end
 
--- Combined move vector: X = right, Z = backward (W gives Z = -1), each axis clamped to [-1, 1].
-function InputController.GetMoveVector(): Vector3
-	local x, z = 0, 0
-
+-- Steering in [-1, 1], positive = right.
+function InputController.GetSteer(): number
+	local steer = 0
 	if not UserInputService:GetFocusedTextBox() then
-		local keys = InputConfig.MoveKeys
-		x += (if anyKeyDown(keys.Right) then 1 else 0) - (if anyKeyDown(keys.Left) then 1 else 0)
-		z += (if anyKeyDown(keys.Back) then 1 else 0) - (if anyKeyDown(keys.Forward) then 1 else 0)
+		steer += (if anyKeyDown(InputConfig.Steer.Right) then 1 else 0) - (if anyKeyDown(InputConfig.Steer.Left) then 1 else 0)
 	end
-
-	if gamepadMove.Magnitude > STICK_DEADZONE then
-		x += gamepadMove.X
-		z -= gamepadMove.Y
+	if math.abs(gamepadMove.X) > InputConfig.StickDeadzone then
+		steer += gamepadMove.X
 	end
-
-	x += (if touchMove.Right then 1 else 0) - (if touchMove.Left then 1 else 0)
-	z += (if touchMove.Brake then 1 else 0) - (if touchMove.Tuck then 1 else 0)
+	steer += (if touchSteer.Right then 1 else 0) - (if touchSteer.Left then 1 else 0)
 
 	local c = getControls()
 	if c and UserInputService.TouchEnabled then
-		-- Default mobile thumbstick, when the place has the PlayerModule.
-		local moduleVector = c:GetMoveVector()
-		x += moduleVector.X
-		z += moduleVector.Z
+		steer += c:GetMoveVector().X
 	end
-
-	return Vector3.new(math.clamp(x, -1, 1), 0, math.clamp(z, -1, 1))
+	return math.clamp(steer, -1, 1)
 end
 
-function InputController.GetSteer(): number
-	return math.clamp(InputController.GetMoveVector().X, -1, 1)
-end
-
-function InputController.IsTucking(): boolean
-	return InputController.GetMoveVector().Z < -InputConfig.TuckThreshold
-end
-
-function InputController.IsBraking(): boolean
-	return InputController.GetMoveVector().Z > InputConfig.BrakeThreshold
-end
-
-function InputController.ConsumeJump(): boolean
-	local queued = jumpQueued
-	jumpQueued = false
-	return queued
+function InputController.IsHeld(name: string): boolean
+	if next(heldInputs[name]) ~= nil then
+		return true
+	end
+	-- Analog alternatives
+	if name == "Push" then
+		if gamepadMove.Y > InputConfig.StickPushThreshold then
+			return true
+		end
+		local c = getControls()
+		if c and UserInputService.TouchEnabled and c:GetMoveVector().Z < -InputConfig.StickPushThreshold then
+			return true
+		end
+	end
+	return false
 end
 
 function InputController.IsJumpHeld(): boolean
 	return jumpHeld
+end
+
+-- True once after the jump input is released.
+function InputController.ConsumeJumpRelease(): boolean
+	local released = jumpReleaseQueued
+	jumpReleaseQueued = false
+	return released
 end
 
 function InputController.IsRightMouseDown(): boolean
@@ -212,12 +228,12 @@ function InputController.IsRightMouseDown(): boolean
 end
 
 function InputController.HasActiveLookInput(): boolean
-	return rightMouseDown or lookTouch ~= nil or gamepadLook.Magnitude > 0.15
+	return rightMouseDown or lookTouch ~= nil or gamepadLook.Magnitude > InputConfig.StickDeadzone
 end
 
 function InputController.ConsumeLook(dt: number): Vector2
 	local stick = gamepadLook
-	if stick.Magnitude < 0.15 then
+	if stick.Magnitude < InputConfig.StickDeadzone then
 		stick = Vector2.zero
 	end
 	local delta = lookDelta + Vector2.new(stick.X, -stick.Y) * CameraConfig.GamepadLookSpeed * dt

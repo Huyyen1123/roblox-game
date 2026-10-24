@@ -47,20 +47,25 @@ local function assignCollisionGroup(instance: Instance)
 	end
 end
 
-local function teleportToStart(player: Player)
+-- Moves a living character and tells its client to reset movement state there.
+-- The only way the server relocates riders, so every teleport takes the same path.
+function PlayerService.TeleportTo(player: Player, target: CFrame)
 	local character = player.Character
 	local _, root = CharacterUtil.GetAlive(character)
 	if not root then
 		return
 	end
 
-	local target = CourseService.GetSpawnCFrame(spawnSlots[player])
 	pcall(player.RequestStreamAroundAsync, player, target.Position)
 
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
 	character:PivotTo(target)
 	Remotes.ResetState:FireClient(player, target)
+end
+
+local function teleportToStart(player: Player)
+	PlayerService.TeleportTo(player, CourseService.GetSpawnCFrame(spawnSlots[player]))
 end
 
 local function onCharacterAdded(player: Player, character: Model)

@@ -3,6 +3,8 @@
 	PlayerService hooks up players immediately, and waits on CourseService before spawning anyone.
 ]]
 
+local RunService = game:GetService("RunService")
+
 local Services = script.Services
 
 local CourseService = require(Services.CourseService)
@@ -16,3 +18,10 @@ PlayerService.Init({
 
 CourseService.Init()
 PlayerService.Start()
+
+if RunService:IsStudio() then
+	require(script.Dev.DevService).Init({
+		PlayerService = PlayerService,
+		CourseService = CourseService,
+	})
+end

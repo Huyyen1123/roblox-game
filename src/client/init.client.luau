@@ -2,6 +2,7 @@
 	Client bootstrap.
 ]]
 
+local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 
 local Controllers = script.Controllers
@@ -18,6 +19,10 @@ MovementController.Start(InputController)
 CameraController.Start(MovementController, InputController)
 SportSelectUI.Start()
 HudUI.Start(MovementController, CameraController, SportSelectUI)
+
+if RunService:IsStudio() then
+	require(script.Dev.DevTools).Start(MovementController)
+end
 
 -- Route the Roblox menu's "Reset Character" to a server-validated reset to the start gate.
 local resetBindable = Instance.new("BindableEvent")

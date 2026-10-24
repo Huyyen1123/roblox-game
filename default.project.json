@@ -3,20 +3,38 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "Shared": { "$path": "src/shared" },
+      "Shared": {
+        "$path": "src/shared"
+      },
       "Remotes": {
         "$className": "Folder",
-        "SelectSport": { "$className": "RemoteEvent" },
-        "RequestReset": { "$className": "RemoteEvent" },
-        "ResetState": { "$className": "RemoteEvent" }
+        "SelectSport": {
+          "$className": "RemoteEvent"
+        },
+        "RequestReset": {
+          "$className": "RemoteEvent"
+        },
+        "ResetState": {
+          "$className": "RemoteEvent"
+        },
+        "DevTeleport": {
+          "$className": "RemoteEvent"
+        }
       }
     },
     "ServerScriptService": {
-      "Server": { "$path": "src/server" }
+      "Server": {
+        "$path": "src/server"
+      }
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "Client": { "$path": "src/client" }
+        "Client": {
+          "$path": "src/client"
+        }
+      },
+      "$properties": {
+        "EnableMouseLockOption": false
       }
     },
     "Players": {

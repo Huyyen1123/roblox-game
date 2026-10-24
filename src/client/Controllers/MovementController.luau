@@ -1,17 +1,24 @@
 --[[
 	MovementController
-	Custom downhill physics for the local character.
+	Downhill movement for the local character. This module coordinates; the work happens in:
+	  Movement/Rig          constraints + Humanoid state
+	  Movement/GroundProbe  finding the snow under the rider
+	  Movement/Physics      one integration step (grounded / airborne / jump velocity)
+	  Movement/Landing      judging touchdowns
 
-	The Humanoid is put in the Physics state so it stops driving the body. Each PreSimulation
-	step this controller integrates its own velocity (gravity along the slope, drag, carving,
-	jumps) and hands the result to two constraints on the HumanoidRootPart:
-	  - LinearVelocity: the commanded velocity, including a spring term that holds ride height
-	  - AlignOrientation: stand perpendicular to the smoothed slope normal, face the heading,
-	    lean into turns
-	The physics engine still resolves collisions, so comparing the commanded velocity with the
-	velocity the engine actually produced detects impacts with trees and rocks.
+	Each PreSimulation step: read intent from the InputController, detect impacts, probe the
+	ground, judge landings, integrate, handle charged jumps, then command the constraints.
 
-	Modes: Inactive -> Grounded <-> Airborne -> Crashed -> (recover) ; Frozen briefly after resets.
+	Modes (state.Mode):
+	  Inactive   no sport selected / no character
+	  Frozen     briefly after a reset
+	  Grounded   riding normally
+	  Stumbling  grounded with reduced control after a poor landing or a bump
+	  Airborne   in the air
+	  Wipeout    severe impact: sliding to a stop, then a short stumble while getting up
+
+	The client simulates its own character for responsiveness; the server owns spawning,
+	resets and (from Phase 4) race validation.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,33 +33,28 @@ local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 
+local Movement = script.Parent.Parent.Movement
+local Rig = require(Movement.Rig)
+local GroundProbe = require(Movement.GroundProbe)
+local Physics = require(Movement.Physics)
+local Landing = require(Movement.Landing)
+
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
 
 local WORLD_UP = Vector3.yAxis
-local DISABLED_STATES = {
-	Enum.HumanoidStateType.FallingDown,
-	Enum.HumanoidStateType.Ragdoll,
-	Enum.HumanoidStateType.GettingUp,
-	Enum.HumanoidStateType.Running,
-	Enum.HumanoidStateType.Climbing,
-	Enum.HumanoidStateType.Freefall,
-	Enum.HumanoidStateType.Landed,
-	Enum.HumanoidStateType.Flying,
-	Enum.HumanoidStateType.Seated,
-	Enum.HumanoidStateType.Swimming,
-	Enum.HumanoidStateType.StrafingNoPhysics,
-}
 
 local MovementController = {}
 MovementController.Activated = Signal.new()
 MovementController.Deactivated = Signal.new()
 MovementController.ModeChanged = Signal.new() -- (newMode, oldMode)
-MovementController.Landed = Signal.new() -- (quality: "Clean" | "Sketchy" | "Hard", impactSpeed, airTime)
-MovementController.Crashed = Signal.new() -- (reason: "Collision" | "BadLanding")
+MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime)
+MovementController.Stumbled = Signal.new() -- (reason: "Landing" | "Bump" | "Recovery")
+MovementController.Crashed = Signal.new() -- wipeout (reason: "Collision" | "BadLanding")
+MovementController.Jumped = Signal.new() -- (charge: number 0..1)
 MovementController.Reset = Signal.new()
 
--- Snapshot read by the camera and HUD every frame.
+-- Snapshot read by the camera, HUD and dev tools every frame.
 local state = {
 	Active = false,
 	Mode = "Inactive",
@@ -62,10 +64,14 @@ local state = {
 	Forward = Vector3.new(0, 0, -1), -- heading projected onto the ground plane
 	Up = WORLD_UP, -- smoothed ground normal
 	Steer = 0,
+	Tuck = 0, -- 0..1, eased
 	Tucking = false,
 	Braking = false,
 	Grounded = false,
+	JumpCharge = 0, -- 0..1 while Jump is held on the ground
 	AirTime = 0,
+	SlopeAngle = 0,
+	CoastDeceleration = 0,
 	Root = nil :: BasePart?,
 	Character = nil :: Model?,
 }
@@ -75,11 +81,8 @@ local Input -- InputController, injected in Start
 
 -- Per-character runtime
 local character: Model?
-local humanoid: Humanoid?
 local root: BasePart?
-local attachment: Attachment?
-local linearVelocity: LinearVelocity?
-local alignOrientation: AlignOrientation?
+local rig
 local stepConnection: RBXScriptConnection?
 local raycastParams: RaycastParams?
 local rideHeight = 3
@@ -88,25 +91,17 @@ local stats = SportConfig.BaseStats
 local lastCommand: Vector3? = nil
 local timeSinceGrounded = math.huge
 local jumpCooldown = 0
+local jumpCharge = 0
 local groundLock = 0
-local modeTimer = 0
+local impactGrace = 0
+local frozenTimer = 0
+local stumbleTimer = 0
+local stumbleDuration = 1
+local wipeoutTimer = 0
 local skipLandingCheck = false
 local lastResetRequest = 0
-local impactGrace = 0
-local debugBumps = 0
-local debugJumps = 0
-
-local function flatten(vector: Vector3): Vector3?
-	local flat = Vector3.new(vector.X, 0, vector.Z)
-	if flat.Magnitude < 1e-3 then
-		return nil
-	end
-	return flat.Unit
-end
-
-local function projectOnPlane(vector: Vector3, normal: Vector3): Vector3
-	return vector - normal * vector:Dot(normal)
-end
+local clock = 0
+local debugCounters = { Bumps = 0, Jumps = 0, Stumbles = 0, Wipeouts = 0 }
 
 local function expAlpha(rate: number, dt: number): number
 	return 1 - math.exp(-rate * dt)
@@ -135,244 +130,141 @@ function MovementController.RequestReset()
 end
 
 ----------------------------------------------------------------------------------------------
--- Ground probing
+-- Stumble and wipeout
 ----------------------------------------------------------------------------------------------
 
--- Five downward rays (centre + four around it) for a stable normal on bumpy voxel terrain.
-local function probeGround()
-	local origin = root.Position
-	local heading = state.Heading
-	local right = heading:Cross(WORLD_UP)
-	local spread = Config.GroundProbeSpread
-	local length = rideHeight * 1.8 + Config.SnapDistance + Config.GroundProbeExtra
-	local direction = -WORLD_UP * length
-
-	local offsets = {
-		Vector3.zero,
-		heading * spread,
-		-heading * spread,
-		right * spread,
-		-right * spread,
-	}
-
-	local normalSum = Vector3.zero
-	local hits = 0
-	local centerHit = nil
-	for i, offset in offsets do
-		local result = Workspace:Raycast(origin + offset, direction, raycastParams)
-		if result then
-			normalSum += result.Normal
-			hits += 1
-			if i == 1 then
-				centerHit = result
-			end
-		end
+local function startStumble(reason: string, duration: number?)
+	if wipeoutTimer > 0 then
+		return
 	end
-
-	if hits == 0 then
-		return nil
+	duration = duration or Config.Stumble.Duration
+	if reason ~= "Recovery" then
+		state.Velocity *= 1 - Config.Stumble.SpeedLoss
 	end
-
-	local normal = normalSum.Unit
-	local position = if centerHit then centerHit.Position else origin - WORLD_UP * length
-	if not centerHit then
-		-- Estimate the surface under the centre from the averaged plane of the side hits.
-		local result = Workspace:Raycast(origin, -normal * length, raycastParams)
-		if not result then
-			return nil
-		end
-		position = result.Position
-	end
-
-	return {
-		Position = position,
-		Normal = normal,
-		Distance = (origin - position):Dot(normal), -- distance along the normal
-	}
+	stumbleDuration = duration
+	stumbleTimer = math.max(stumbleTimer, duration)
+	jumpCharge = 0
+	debugCounters.Stumbles += 1
+	MovementController.Stumbled:Fire(reason)
 end
 
-----------------------------------------------------------------------------------------------
--- Crash and recovery
-----------------------------------------------------------------------------------------------
-
-local function crash(reason: string)
-	setMode("Crashed")
-	modeTimer = Config.Crash.Duration
-	linearVelocity.Enabled = false
-	alignOrientation.Enabled = false
-
-	local spin = Config.Crash.TumbleSpin
-	root.AssemblyLinearVelocity = state.Velocity * 0.45 + WORLD_UP * 15
-	root.AssemblyAngularVelocity = Vector3.new(
-		(math.random() - 0.5) * 2 * spin,
-		(math.random() - 0.5) * spin,
-		(math.random() - 0.5) * 2 * spin
-	)
-	lastCommand = nil
-	state.Grounded = false
+local function startWipeout(reason: string)
+	if wipeoutTimer > 0 then
+		return
+	end
+	wipeoutTimer = Config.Wipeout.Duration
+	stumbleTimer = 0
+	jumpCharge = 0
+	state.CoastDeceleration = Config.Wipeout.Deceleration
+	impactGrace = Config.Wipeout.Duration
+	debugCounters.Wipeouts += 1
 	MovementController.Crashed:Fire(reason)
 end
 
-local function placeUpright(position: Vector3, facing: Vector3)
-	character:PivotTo(CFrame.lookAt(position, position + facing))
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
-	state.Velocity = Vector3.zero
-	state.Heading = facing
-	state.Up = WORLD_UP
-	lastCommand = nil
-end
-
-local function recover()
-	local probe = Workspace:Raycast(root.Position + WORLD_UP * 8, -WORLD_UP * Config.Crash.RecoverProbeDistance, raycastParams)
-	if not probe then
-		MovementController.RequestReset()
-		modeTimer = 0.5
-		return
-	end
-
-	local facing = flatten(state.Velocity) or state.Heading
-	placeUpright(probe.Position + WORLD_UP * (rideHeight + 0.5), facing)
-	linearVelocity.Enabled = true
-	alignOrientation.Enabled = true
-	skipLandingCheck = true
-	setMode("Airborne")
+local function endWipeout()
+	wipeoutTimer = 0
+	state.CoastDeceleration = 0
+	state.Heading = Physics.Flatten(state.Velocity) or state.Heading
+	startStumble("Recovery", Config.Wipeout.RecoveryStumble)
 end
 
 ----------------------------------------------------------------------------------------------
--- Integration
+-- Step
 ----------------------------------------------------------------------------------------------
 
-local function turnHeading(rate: number, dt: number)
-	local angle = -state.Steer * rate * dt
-	state.Heading = (CFrame.Angles(0, angle, 0) * state.Heading).Unit
+local function readIntent(dt: number)
+	local canAct = wipeoutTimer <= 0
+	local steady = canAct and stumbleTimer <= 0
+
+	state.Steer += (Input.GetSteer() - state.Steer) * expAlpha(Config.SteerResponse, dt)
+
+	local tuckTarget = if steady and Input.IsHeld("Tuck") then 1 else 0
+	local tuckTime = if tuckTarget > state.Tuck then Config.Tuck.InTime else Config.Tuck.OutTime
+	state.Tuck = math.clamp(state.Tuck + math.sign(tuckTarget - state.Tuck) * dt / tuckTime, 0, 1)
+	state.Tucking = state.Tuck > 0.5
+	state.Braking = canAct and Input.IsHeld("Brake")
+
+	return {
+		Steer = state.Steer * (if stumbleTimer > 0 then Config.Stumble.SteerMultiplier else 1),
+		Tuck = state.Tuck,
+		Brake = state.Braking,
+		Push = canAct and Input.IsHeld("Push"),
+		Coast = not canAct,
+	}
 end
 
-local function planeBasis(normal: Vector3): (Vector3, Vector3)
-	local forward = projectOnPlane(state.Heading, normal)
-	if forward.Magnitude < 1e-3 then
-		forward = projectOnPlane(-WORLD_UP:Cross(normal), normal)
-	end
-	forward = forward.Unit
-	return forward, forward:Cross(normal).Unit
-end
-
--- Returns false if the landing was a crash.
-local function land(normal: Vector3): boolean
-	local velocity = state.Velocity
-	local impact = -velocity:Dot(normal)
-	local planar = projectOnPlane(velocity, normal)
-	local landing = Config.Landing
-
-	if skipLandingCheck then
-		skipLandingCheck = false
-		state.Velocity = planar
-		return true
-	end
-
-	local forward = planeBasis(normal)
-	local angle = 0
-	if planar.Magnitude > 10 then
-		angle = math.deg(math.acos(math.clamp(planar.Unit:Dot(forward), -1, 1)))
-	end
-
-	local stability = stats.Stability
-	if impact > landing.CrashImpact * stability or (angle > landing.SketchyAngle and planar.Magnitude > 25) then
-		crash("BadLanding")
+-- Engine resolved a collision: compare what we asked for with what we got.
+local function detectImpact(): boolean
+	local actual = root.AssemblyLinearVelocity
+	if not lastCommand or impactGrace > 0 or (lastCommand - actual).Magnitude <= Config.Impact.Deviation then
 		return false
 	end
 
-	local quality = "Clean"
-	local speedLoss = 0
-	if angle > landing.CleanAngle then
-		quality = "Sketchy"
-		speedLoss += landing.SketchySpeedLoss
-		state.Heading = flatten(planar) or state.Heading
+	local speedLoss = lastCommand.Magnitude - actual.Magnitude
+	state.Velocity = actual
+	debugCounters.Bumps += 1
+	if lastCommand.Magnitude > Config.Impact.WipeoutMinSpeed and speedLoss > Config.Impact.WipeoutSpeedLoss then
+		startWipeout("Collision")
+		return true
+	elseif speedLoss > Config.Impact.StumbleSpeedLoss then
+		startStumble("Bump")
 	end
-	local softImpact = landing.SoftImpact * stability
-	if impact > softImpact then
-		speedLoss += (impact - softImpact) * landing.HardSpeedLossPerImpact
-		if quality == "Clean" then
-			quality = "Hard"
+	return false
+end
+
+local function touchDown(normal: Vector3)
+	if skipLandingCheck then
+		skipLandingCheck = false
+		state.Velocity = Physics.ProjectOnPlane(state.Velocity, normal)
+		return
+	end
+
+	local result = Landing.Evaluate(state.Velocity, state.Heading, normal, stats, Config)
+	state.Velocity = result.Velocity
+	-- The landing deliberately removes velocity into the surface; don't read that as an impact.
+	impactGrace = math.max(impactGrace, Config.Impact.Grace)
+
+	if result.Quality == "Wipeout" then
+		startWipeout("BadLanding")
+		return
+	end
+	if result.Heading then
+		state.Heading = result.Heading
+	end
+	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime)
+	if result.Stumble then
+		startStumble("Landing")
+	end
+end
+
+local function updateJump(dt: number, ground, command: Vector3): Vector3
+	local eligible = wipeoutTimer <= 0 and stumbleTimer <= 0 and jumpCooldown <= 0
+	local onGround = timeSinceGrounded <= Config.Jump.CoyoteTime
+
+	if Input.IsJumpHeld() and eligible and state.Grounded then
+		jumpCharge = math.min(jumpCharge + dt, Config.Jump.ChargeTime)
+	end
+
+	if Input.ConsumeJumpRelease() then
+		if eligible and onGround then
+			local charge = jumpCharge / Config.Jump.ChargeTime
+			local power = (Config.Jump.HopPower + (Config.Jump.FullPower - Config.Jump.HopPower) * charge) * stats.Airtime
+			local normal = if ground then ground.Normal else WORLD_UP
+			state.Velocity = Physics.JumpVelocity(state.Velocity, normal, power, Config.Jump.UpBias)
+			command = state.Velocity
+			state.Grounded = false
+			timeSinceGrounded = math.huge
+			jumpCooldown = Config.Jump.Cooldown
+			groundLock = Config.Jump.GroundLock
+			impactGrace = math.max(impactGrace, Config.Impact.Grace)
+			debugCounters.Jumps += 1
+			MovementController.Jumped:Fire(charge)
 		end
+		jumpCharge = 0
 	end
 
-	state.Velocity = planar * (1 - math.clamp(speedLoss, 0, 0.9))
-	-- The landing deliberately removes the velocity into the surface; don't read that as an impact.
-	impactGrace = Config.Crash.ImpactGrace
-	MovementController.Landed:Fire(quality, impact, state.AirTime)
-	return true
-end
-
-local function groundedStep(dt: number, ground): Vector3
-	local normal = ground.Normal
-	local gravity = Config.Gravity
-	local velocity = projectOnPlane(state.Velocity, normal)
-
-	-- Gravity along the slope
-	local gravityVector = -WORLD_UP * gravity
-	velocity += projectOnPlane(gravityVector, normal) * stats.Acceleration * dt
-
-	-- Steering: rotate the heading, faster at low speed
-	local speed = velocity.Magnitude
-	local speedT = math.clamp(speed / Config.TurnRateSpeedRef, 0, 1)
-	local turnRate = (Config.TurnRateLowSpeed + (Config.TurnRateHighSpeed - Config.TurnRateLowSpeed) * speedT) * stats.Handling
-	if state.Tucking then
-		turnRate *= Config.TuckTurnMultiplier
-	elseif state.Braking then
-		turnRate *= Config.BrakeTurnMultiplier
-	end
-	turnHeading(turnRate, dt)
-
-	-- Drag, snow friction, braking
-	local drag = Config.DragCoefficient / (stats.Speed * stats.Speed)
-	if state.Tucking then
-		drag *= Config.TuckDragMultiplier
-	end
-	local deceleration = drag * speed * speed + Config.SnowFriction * gravity * normal.Y
-	if state.Braking then
-		deceleration += Config.BrakeDeceleration
-	end
-	if speed > 1e-3 then
-		velocity *= math.max(speed - deceleration * dt, 0) / speed
-	end
-
-	-- Carving: edges bleed off sideways slide and redirect most of it forward
-	local forward, right = planeBasis(normal)
-	local forwardSpeed = velocity:Dot(forward)
-	local sideSpeed = velocity:Dot(right)
-	local grip = (if state.Braking then Config.BrakeGrip else Config.CarveGrip) * stats.Handling
-	local newSideSpeed = sideSpeed * math.exp(-grip * dt)
-	local recovered = (math.abs(sideSpeed) - math.abs(newSideSpeed)) * Config.CarveEfficiency
-	forwardSpeed += if forwardSpeed >= 0 then recovered else -recovered
-
-	-- Skating on flat ground
-	if state.Tucking and forwardSpeed >= -1 and forwardSpeed < Config.PushMaxSpeed then
-		forwardSpeed += Config.PushAcceleration * stats.Acceleration * dt
-	end
-
-	velocity = forward * forwardSpeed + right * newSideSpeed
-	if velocity.Magnitude > Config.MaxSpeed then
-		velocity = velocity.Unit * Config.MaxSpeed
-	end
-	state.Velocity = velocity
-	state.Forward = forward
-
-	-- Spring that holds the root at ride height above the surface
-	local correction = math.clamp((rideHeight - ground.Distance) * Config.HoverStiffness, -Config.MaxHoverCorrection, Config.MaxHoverCorrection)
-	return velocity + normal * correction
-end
-
-local function airborneStep(dt: number): Vector3
-	local velocity = state.Velocity - WORLD_UP * Config.Gravity * dt
-	local speed = velocity.Magnitude
-	if speed > 1e-3 then
-		velocity *= math.max(speed - Config.AirDragCoefficient * speed * speed * dt, 0) / speed
-	end
-	turnHeading(Config.AirTurnRate, dt)
-	state.Velocity = velocity
-	state.Forward = projectOnPlane(state.Heading, state.Up).Unit
-	return velocity
+	state.JumpCharge = jumpCharge / Config.Jump.ChargeTime
+	return command
 end
 
 local function updateOrientation(dt: number, ground)
@@ -383,35 +275,54 @@ local function updateOrientation(dt: number, ground)
 	end
 
 	local up = state.Up
-	local forward = projectOnPlane(state.Heading, up).Unit
+	local forward = Physics.ProjectOnPlane(state.Heading, up).Unit
 
+	local roll = 0
 	if state.Grounded then
-		local lean = math.rad(Config.LeanAngle) * state.Steer * math.clamp(state.Speed / Config.LeanSpeedRef, 0, 1)
-		up = CFrame.fromAxisAngle(forward, lean) * up
+		roll = math.rad(Config.LeanAngle) * state.Steer * math.clamp(state.Speed / Config.LeanSpeedRef, 0, 1)
 	end
+	if stumbleTimer > 0 then
+		-- Wobble that fades out as the rider regains balance
+		local fade = stumbleTimer / stumbleDuration
+		roll += math.rad(Config.Stumble.WobbleAngle) * math.sin(clock * 18) * fade
+	end
+	if wipeoutTimer > 0 then
+		-- Down on one side while sliding to a stop
+		local side = if state.Velocity:Dot(forward:Cross(up)) >= 0 then 1 else -1
+		roll += math.rad(Config.Wipeout.LeanAngle) * side
+	end
+	up = CFrame.fromAxisAngle(forward, roll) * up
 
-	alignOrientation.CFrame = CFrame.lookAt(Vector3.zero, forward, up)
-	alignOrientation.Responsiveness = if state.Grounded
-		then Config.Orientation.GroundResponsiveness
-		else Config.Orientation.AirResponsiveness
+	rig:Orient(
+		CFrame.lookAt(Vector3.zero, forward, up),
+		if state.Grounded then Config.Orientation.GroundResponsiveness else Config.Orientation.AirResponsiveness
+	)
+end
+
+local function writeDebug(ground, command: Vector3)
+	root:SetAttribute("DebugMode", state.Mode)
+	root:SetAttribute("DebugSpeed", state.Speed)
+	root:SetAttribute("DebugTuck", state.Tuck)
+	root:SetAttribute("DebugJumpCharge", state.JumpCharge)
+	root:SetAttribute("DebugSlope", state.SlopeAngle)
+	root:SetAttribute("DebugGroundDistance", if ground then ground.Distance - rideHeight else -1)
+	root:SetAttribute("DebugCommand", command)
+	for name, count in debugCounters do
+		root:SetAttribute("Debug" .. name, count)
+	end
 end
 
 local function step(dt: number)
 	dt = math.min(dt, 1 / 20)
+	clock += dt
 
-	if not root or not root.Parent or not humanoid or humanoid.Health <= 0 then
+	if not root or not root.Parent or not rig or rig.Humanoid.Health <= 0 then
 		MovementController.Deactivate()
 		return
 	end
-	if humanoid:GetState() ~= Enum.HumanoidStateType.Physics then
-		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-	end
+	rig:EnforcePhysicsState()
 
-	-- Input
-	local targetSteer = Input.GetSteer()
-	state.Steer += (targetSteer - state.Steer) * expAlpha(Config.SteerResponse, dt)
-	state.Tucking = Input.IsTucking()
-	state.Braking = Input.IsBraking()
+	local intent = readIntent(dt)
 
 	local killY = getKillY()
 	if killY and root.Position.Y < killY then
@@ -420,41 +331,32 @@ local function step(dt: number)
 
 	jumpCooldown -= dt
 	groundLock -= dt
+	impactGrace -= dt
+	stumbleTimer = math.max(stumbleTimer - dt, 0)
+	if wipeoutTimer > 0 then
+		wipeoutTimer -= dt
+		if wipeoutTimer <= 0 then
+			endWipeout()
+		end
+	end
 
 	if state.Mode == "Frozen" then
-		modeTimer -= dt
-		linearVelocity.VectorVelocity = Vector3.zero
-		Input.ConsumeJump()
-		if modeTimer <= 0 then
+		frozenTimer -= dt
+		rig:Drive(Vector3.zero)
+		Input.ConsumeJumpRelease()
+		jumpCharge = 0
+		if frozenTimer <= 0 then
 			setMode("Airborne")
 		end
 		return
-	elseif state.Mode == "Crashed" then
-		modeTimer -= dt
-		state.Velocity = root.AssemblyLinearVelocity
-		state.Speed = state.Velocity.Magnitude
-		Input.ConsumeJump()
-		if modeTimer <= 0 then
-			recover()
-		end
-		return
 	end
 
-	-- Impact detection: the engine stopped us much harder than we asked for
-	local actual = root.AssemblyLinearVelocity
-	impactGrace -= dt
-	if lastCommand and impactGrace <= 0 and (lastCommand - actual).Magnitude > Config.Crash.CollisionDeviation then
-		local speedLoss = lastCommand.Magnitude - actual.Magnitude
-		if lastCommand.Magnitude > Config.Crash.MinSpeedForCollisionCrash and speedLoss > Config.Crash.CollisionSpeedLoss then
-			crash("Collision")
-			return
-		end
-		state.Velocity = actual
-		debugBumps += 1
+	if detectImpact() then
+		intent = readIntent(0)
 	end
 
 	-- Ground state
-	local ground = probeGround()
+	local ground = GroundProbe.Probe(root.Position, state.Heading, rideHeight, raycastParams, Config)
 	local wasGrounded = state.Grounded
 	local canGround = false
 	if ground and groundLock <= 0 and ground.Normal.Y >= math.cos(math.rad(Config.MaxGroundAngle)) then
@@ -463,8 +365,9 @@ local function step(dt: number)
 	end
 
 	if canGround and not wasGrounded then
-		if not land(ground.Normal) then
-			return
+		touchDown(ground.Normal)
+		if wipeoutTimer > 0 then
+			intent = readIntent(0)
 		end
 	end
 
@@ -473,46 +376,34 @@ local function step(dt: number)
 		state.Grounded = true
 		timeSinceGrounded = 0
 		state.AirTime = 0
-		setMode("Grounded")
-		command = groundedStep(dt, ground)
+		state.SlopeAngle = math.deg(math.acos(math.clamp(ground.Normal.Y, -1, 1)))
+		command = Physics.Grounded(state, ground, intent, stats, Config, rideHeight, dt)
 	else
 		state.Grounded = false
 		timeSinceGrounded += dt
 		state.AirTime += dt
-		setMode("Airborne")
-		command = airborneStep(dt)
+		command = Physics.Airborne(state, intent, Config, dt)
 	end
 
-	-- Jump (with a short coyote window after leaving the ground)
-	if Input.ConsumeJump() and jumpCooldown <= 0 and timeSinceGrounded <= Config.CoyoteTime then
-		local normal = if ground then ground.Normal else WORLD_UP
-		local direction = normal:Lerp(WORLD_UP, Config.JumpUpBias).Unit
-		state.Velocity = projectOnPlane(state.Velocity, normal) + direction * Config.JumpPower * stats.Airtime
-		command = state.Velocity
-		state.Grounded = false
-		timeSinceGrounded = math.huge
-		jumpCooldown = Config.JumpCooldown
-		debugJumps += 1
-		impactGrace = Config.Crash.ImpactGrace
-		groundLock = Config.JumpGroundLock
+	command = updateJump(dt, ground, command)
+
+	if wipeoutTimer > 0 then
+		setMode("Wipeout")
+	elseif not state.Grounded then
 		setMode("Airborne")
+	elseif stumbleTimer > 0 then
+		setMode("Stumbling")
+	else
+		setMode("Grounded")
 	end
 
 	state.Speed = state.Velocity.Magnitude
 	updateOrientation(dt, ground)
-
-	linearVelocity.MaxForce = root.AssemblyMass * Config.MaxForcePerMass
-	linearVelocity.VectorVelocity = command
+	rig:Drive(command)
 	lastCommand = command
 
 	if Config.Debug then
-		root:SetAttribute("DebugMode", state.Mode)
-		root:SetAttribute("DebugSpeed", state.Speed)
-		root:SetAttribute("DebugBumps", debugBumps)
-		root:SetAttribute("DebugJumps", debugJumps)
-		root:SetAttribute("DebugSlope", if ground then math.deg(math.acos(math.clamp(ground.Normal.Y, -1, 1))) else -1)
-		root:SetAttribute("DebugGroundDistance", if ground then ground.Distance - rideHeight else -1)
-		root:SetAttribute("DebugCommand", command)
+		writeDebug(ground, command)
 	end
 end
 
@@ -532,58 +423,44 @@ local function buildRaycastParams(): RaycastParams
 	return params
 end
 
+local function resetTimers()
+	lastCommand = nil
+	timeSinceGrounded = math.huge
+	jumpCooldown = 0
+	jumpCharge = 0
+	groundLock = 0
+	impactGrace = 0
+	stumbleTimer = 0
+	wipeoutTimer = 0
+	state.CoastDeceleration = 0
+	state.JumpCharge = 0
+	state.Tuck = 0
+	skipLandingCheck = true
+end
+
 function MovementController.Activate()
 	if state.Active then
 		return
 	end
-	local h, r = CharacterUtil.GetAlive(player.Character)
-	if not h or not r then
+	local humanoid, r = CharacterUtil.GetAlive(player.Character)
+	if not humanoid or not r then
 		return
 	end
 
-	character, humanoid, root = player.Character, h, r
+	character, root = player.Character, r
 	stats = SportConfig.GetStats(player:GetAttribute(Constants.Attributes.Sport))
 	rideHeight = CharacterUtil.GetFootOffset(character) + Config.EquipmentThickness
 	raycastParams = buildRaycastParams()
+	rig = Rig.new(humanoid, root, Config)
 
-	for _, stateType in DISABLED_STATES do
-		humanoid:SetStateEnabled(stateType, false)
-	end
-	humanoid.AutoRotate = false
-	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-
-	attachment = Instance.new("Attachment")
-	attachment.Name = "DownhillAttachment"
-	attachment.Parent = root
-
-	linearVelocity = Instance.new("LinearVelocity")
-	linearVelocity.Name = "DownhillVelocity"
-	linearVelocity.Attachment0 = attachment
-	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-	linearVelocity.MaxForce = root.AssemblyMass * Config.MaxForcePerMass
-	linearVelocity.VectorVelocity = root.AssemblyLinearVelocity
-	linearVelocity.Parent = root
-
-	alignOrientation = Instance.new("AlignOrientation")
-	alignOrientation.Name = "DownhillOrientation"
-	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-	alignOrientation.Attachment0 = attachment
-	alignOrientation.MaxTorque = Config.Orientation.MaxTorque
-	alignOrientation.Responsiveness = Config.Orientation.GroundResponsiveness
-	alignOrientation.CFrame = root.CFrame.Rotation
-	alignOrientation.Parent = root
-
-	state.Heading = flatten(root.CFrame.LookVector) or Vector3.new(0, 0, 1)
+	state.Heading = Physics.Flatten(root.CFrame.LookVector) or Vector3.new(0, 0, 1)
 	state.Velocity = root.AssemblyLinearVelocity
 	state.Up = WORLD_UP
 	state.Grounded = false
 	state.Root = root
 	state.Character = character
 	state.Active = true
-	lastCommand = nil
-	timeSinceGrounded = math.huge
-	skipLandingCheck = true
+	resetTimers()
 
 	Input.SetRidingEnabled(true)
 	setMode("Airborne")
@@ -601,24 +478,12 @@ function MovementController.Deactivate()
 		stepConnection:Disconnect()
 		stepConnection = nil
 	end
-	for _, instance in { linearVelocity, alignOrientation, attachment } do
-		if instance then
-			instance:Destroy()
-		end
-	end
-	linearVelocity, alignOrientation, attachment = nil, nil, nil
-
-	if humanoid and humanoid.Parent then
-		for _, stateType in DISABLED_STATES do
-			humanoid:SetStateEnabled(stateType, true)
-		end
-		humanoid.AutoRotate = true
-		if humanoid.Health > 0 then
-			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-		end
+	if rig then
+		rig:Destroy()
+		rig = nil
 	end
 
-	character, humanoid, root = nil, nil, nil
+	character, root = nil, nil
 	state.Root = nil
 	state.Character = nil
 	state.Grounded = false
@@ -639,7 +504,6 @@ local function refresh()
 
 	if hasSport and alive then
 		if state.Active then
-			-- Sport switched mid-session: just pick up the (identical) stats.
 			stats = SportConfig.GetStats(player:GetAttribute(Constants.Attributes.Sport))
 		else
 			MovementController.Activate()
@@ -653,13 +517,17 @@ local function onResetState(target: CFrame)
 	if not state.Active or not root then
 		return
 	end
-	placeUpright(target.Position, flatten(target.LookVector) or state.Heading)
-	linearVelocity.Enabled = true
-	alignOrientation.Enabled = true
+	local facing = Physics.Flatten(target.LookVector) or state.Heading
+	character:PivotTo(CFrame.lookAt(target.Position, target.Position + facing))
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	state.Velocity = Vector3.zero
+	state.Heading = facing
+	state.Up = WORLD_UP
 	state.Grounded = false
 	state.Speed = 0
-	skipLandingCheck = true
-	modeTimer = Config.FrozenAfterReset
+	resetTimers()
+	frozenTimer = Config.FrozenAfterReset
 	setMode("Frozen")
 	MovementController.Reset:Fire()
 end

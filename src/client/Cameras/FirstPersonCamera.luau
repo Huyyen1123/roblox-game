@@ -76,7 +76,7 @@ function FirstPersonCamera:Update(dt: number, camera: Camera, state, input)
 	end
 
 	-- Base direction: along the slope, partly toward travel direction
-	if state.Mode ~= "Crashed" then
+	if state.Mode ~= "Wipeout" then
 		local target = state.Forward
 		if state.Speed > 10 then
 			target = target:Lerp(state.Velocity.Unit, Config.VelocityBlend)

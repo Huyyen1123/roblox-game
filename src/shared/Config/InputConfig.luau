@@ -1,24 +1,33 @@
 --[[
 	InputConfig
-	Key bindings. Steering/tuck/brake are axes read every frame from MoveKeys, the left gamepad
-	thumbstick, and on touch either the default thumbstick or TouchMoveButtons.
-	Discrete actions are bound through ContextActionService.
+	Every binding lives here so gameplay code only ever sees actions ("Tuck", "Jump"),
+	never keys. PC is the primary target; gamepad and touch bindings sit alongside.
+
+	Kinds of input:
+	  Steer     – axis from keys, the left stick, or touch.
+	  Held      – true while any bound input is down (Tuck, Brake, Push).
+	  Actions   – discrete presses/releases (Jump, ToggleCamera, Reset, Zoom).
+	Reserved for Phase 4 tricks while airborne: A/D spin, W/S flip, Q/E grab.
 ]]
 
 return {
-	MoveKeys = {
+	Steer = {
 		Left = { Enum.KeyCode.A, Enum.KeyCode.Left },
 		Right = { Enum.KeyCode.D, Enum.KeyCode.Right },
-		Forward = { Enum.KeyCode.W, Enum.KeyCode.Up },
-		Back = { Enum.KeyCode.S, Enum.KeyCode.Down },
 	},
 
-	-- Used only on touch devices when the place has no PlayerModule thumbstick.
-	TouchMoveButtons = {
-		Left = { Title = "<", Position = UDim2.new(0, 30, 1, -100) },
-		Right = { Title = ">", Position = UDim2.new(0, 110, 1, -100) },
-		Tuck = { Title = "Tuck", Position = UDim2.new(0, 70, 1, -175) },
-		Brake = { Title = "Brake", Position = UDim2.new(1, -170, 1, -135) },
+	Held = {
+		Tuck = {
+			Keys = { Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonR2 },
+			TouchButton = { Title = "Tuck", Position = UDim2.new(1, -170, 1, -135) },
+		},
+		Brake = {
+			Keys = { Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl, Enum.KeyCode.ButtonL2 },
+			TouchButton = { Title = "Brake", Position = UDim2.new(1, -245, 1, -60) },
+		},
+		Push = {
+			Keys = { Enum.KeyCode.W, Enum.KeyCode.Up },
+		},
 	},
 
 	Actions = {
@@ -42,7 +51,13 @@ return {
 		},
 	},
 
+	-- Touch steering buttons, used only when the place has no default thumbstick.
+	TouchSteerButtons = {
+		Left = { Title = "<", Position = UDim2.new(0, 30, 1, -100) },
+		Right = { Title = ">", Position = UDim2.new(0, 110, 1, -100) },
+	},
+
 	ActionPriority = Enum.ContextActionPriority.High.Value,
-	TuckThreshold = 0.5,
-	BrakeThreshold = 0.5,
+	StickDeadzone = 0.15,
+	StickPushThreshold = 0.6, -- left stick forward beyond this counts as Push
 }
