@@ -16,13 +16,13 @@
 
 return {
 	Ski = {
-		Crouch = 24, -- knees bent while riding normally
-		TuckCrouch = 52, -- deep tuck
-		AirCrouch = 34, -- knees drawn up in the air
+		Crouch = 30, -- low, athletic stance: hips down, knees well bent
+		TuckCrouch = 56, -- deep tuck
+		AirCrouch = 40, -- knees drawn up in the air
 		ChargeCrouch = 16, -- extra knee load while charging a jump
-		BrakeCrouch = 32,
-		TorsoPitch = 18, -- forward lean of the upper body
-		TuckTorsoPitch = 44,
+		BrakeCrouch = 38,
+		TorsoPitch = 24, -- upper body leans forward, down the hill
+		TuckTorsoPitch = 46,
 		ArmForward = 30, -- upper arms forward, hands in front holding the poles
 		TuckArmForward = 58,
 		Elbow = 40,
@@ -30,16 +30,19 @@ return {
 		ArmOut = 14, -- arms slightly away from the body (poles clear the skis)
 		Wrist = -12, -- poles trail down and back, tips just above the snow
 		TuckWrist = -95, -- poles tucked under the arms, pointing back
-		Angulation = 10, -- upper body stays more upright than the legs in a turn
+		Angulation = 14, -- upper body stays more upright than the legs in a turn
 		NeckCompensation = 0.7, -- share of the torso lean the head undoes, to keep looking ahead
 		StanceYaw = 0,
 		HeadYaw = 0,
 		Spread = 4, -- legs angled slightly apart: an athletic, hip-width stance
 
-		Inclination = 11, -- knees driven into the turn
-		InsideLegBend = 9, -- inside leg flexes more…
-		OutsideLegExtend = 6, -- …outside leg extends, as in a real carve
-		CounterRotation = 8, -- upper body yaws against the turn to keep facing downhill
+		Inclination = 16, -- knees driven into the turn
+		InsideLegBend = 12, -- inside leg flexes more…
+		OutsideLegExtend = 8, -- …outside leg extends, as in a real carve
+		CounterRotation = 10, -- upper body yaws against the turn to keep facing downhill
+		CarveArmForward = 12, -- inside hand drives forward through a carve
+		CarveArmOut = 10, -- outside arm lifts slightly for balance
+		AirArmOut = 12, -- arms open a little in the air (balance through spins)
 
 		PoleTrigger = 0.35, -- |steer| that counts as starting a turn
 		PlantForward = 32, -- inside arm swings forward to plant the pole
@@ -48,12 +51,12 @@ return {
 	},
 
 	Snowboard = {
-		Crouch = 20,
-		TuckCrouch = 40,
-		AirCrouch = 32,
+		Crouch = 28,
+		TuckCrouch = 44,
+		AirCrouch = 40,
 		ChargeCrouch = 16,
-		BrakeCrouch = 30,
-		TorsoPitch = 10,
+		BrakeCrouch = 36,
+		TorsoPitch = 14,
 		TuckTorsoPitch = 24,
 		ArmForward = 12,
 		TuckArmForward = 30,
@@ -72,6 +75,9 @@ return {
 		InsideLegBend = 0,
 		OutsideLegExtend = 0,
 		CounterRotation = 0,
+		CarveArmForward = 0,
+		CarveArmOut = 8,
+		AirArmOut = 18,
 
 		PoleTrigger = 2, -- never (no poles)
 		PlantForward = 0,

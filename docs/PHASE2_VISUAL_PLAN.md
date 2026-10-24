@@ -4,6 +4,22 @@ Done so far: riding stance (skis and snowboard), turning leg motion (inclination
 leg bend, counter-rotation), terrain absorption, ski poles with pole plants. These are
 replicated to other players.
 
+Look-and-feel pass (2026-10-24):
+- Lower, more athletic stance with stronger carving lean, and arms that react through turns.
+- Realistically proportioned skis (with bindings) and snowboard (with strap bindings), plus
+  boots. These are temporary primitives; the final MeshPart spec is in
+  [EQUIPMENT_ASSETS.md](EQUIPMENT_ASSETS.md).
+- A lower, closer camera with turn anticipation, a landing dip and a faint high-speed buzz. In
+  the air it follows the travel direction.
+- Ski and board trails, snow spray (subtle; needs a custom texture), landing puffs and wind
+  streaks.
+- A minimal HUD: compact bottom-right speedometer, control hints that fade once used, and the
+  camera mode shown briefly only on change.
+- Tricks: faster air spins with a landing assist, longer hang time, switch landings after 180s,
+  and spin callouts.
+
+Environment items to do later are documented in [ENVIRONMENT_FUTURE.md](ENVIRONMENT_FUTURE.md).
+
 Goal: riding looks and feels like a winter sports game, not a Roblox prototype. Following the
 roadmap, Phase 2 focuses on **the rider and the camera**: posture, animation, equipment and
 camera. It also includes the two pieces of visual feedback that most affect how fast and smooth

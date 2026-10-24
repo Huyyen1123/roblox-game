@@ -142,6 +142,12 @@ function CameraController.Start(movementController, inputController)
 	Input = inputController
 
 	Input.CameraToggled:Connect(CameraController.Toggle)
+	Movement.Landed:Connect(function(_quality, impact)
+		local mode = instances[currentModeName]
+		if mode and mode.OnLanded then
+			mode:OnLanded(impact)
+		end
+	end)
 	Movement.Activated:Connect(start)
 	Movement.Deactivated:Connect(stop)
 	if Movement.IsActive() then

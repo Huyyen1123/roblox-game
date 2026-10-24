@@ -1,8 +1,10 @@
 --[[
 	EquipmentService
-	Attaches placeholder skis or a snowboard under the character's feet, plus ski poles.
+	Builds skis (with bindings and poles) or a snowboard (with strap bindings) under the
+	character's feet, plus boots. Temporary primitive geometry, proportioned to an R15 avatar;
+	the final MeshPart spec is in docs/EQUIPMENT_ASSETS.md.
 	Skis and board are welded to the HumanoidRootPart so they stay flat on the snow (the riding
-	pose keeps the feet planted on them). Poles are welded into the hands, so they follow the
+	pose keeps the feet planted on them); boots are welded to the feet. Poles are welded into the hands, so they follow the
 	client-side arm pose: trailing while riding, tucked under the arms, planting on turns.
 ]]
 
@@ -16,39 +18,123 @@ local Create = require(ReplicatedStorage.Shared.Util.Create)
 
 local EquipmentService = {}
 
-local function weldedPart(root: BasePart, model: Model, name: string, size: Vector3, offset: CFrame, color: Color3)
-	local part = Create("Part", {
+local rad = math.rad
+-- Equipment base sits this far below the feet (matches the ride height used by movement).
+local BASE_DROP = MovementConfig.EquipmentThickness
+-- Roblox cylinders run along X; this turns one into a flat disc lying in the XZ plane.
+local DISC = CFrame.Angles(0, 0, rad(90))
+
+local function newPart(model: Model, name: string, size: Vector3, color: Color3, material: Enum.Material?, shape: Enum.PartType?)
+	return Create("Part", {
 		Name = name,
+		Shape = shape or Enum.PartType.Block,
 		Size = size,
-		CFrame = root.CFrame * offset,
 		Color = color,
-		Material = Enum.Material.SmoothPlastic,
+		Material = material or Enum.Material.SmoothPlastic,
 		Massless = true,
 		CanCollide = false,
 		CanQuery = false,
 		CanTouch = false,
+		CastShadow = true,
 		TopSurface = Enum.SurfaceType.Smooth,
 		BottomSurface = Enum.SurfaceType.Smooth,
 		Parent = model,
 	})
-	Create("WeldConstraint", { Part0 = root, Part1 = part, Parent = part })
+end
+
+-- A part placed at `offset` in `base` space and welded to it.
+local function attach(base: BasePart, model: Model, name: string, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material?, shape: Enum.PartType?)
+	local part = newPart(model, name, size, color, material, shape)
+	part.CFrame = base.CFrame * offset
+	Create("Weld", { Part0 = base, Part1 = part, C0 = offset, Parent = part })
 	return part
 end
 
+--[[
+	An upturned, rounded end (ski tip/tail, board nose/tail). `frame` is the centre of the flat
+	section's end edge on the base's mid-plane, looking outward (-Z = outward). The end turns
+	up by `angle` and finishes in a half-disc of the given width.
+]]
+local function roundedEnd(root: BasePart, model: Model, name: string, frame: CFrame, width: number, thickness: number, length: number, angle: number, color: Color3)
+	local radius = width / 2
+	local bent = frame * CFrame.Angles(rad(angle), 0, 0)
+	local straight = math.max(length - radius, 0.02)
+	attach(root, model, name, Vector3.new(width, thickness, straight), bent * CFrame.new(0, 0, -straight / 2), color)
+	attach(root, model, name .. "Round", Vector3.new(thickness, width, width), bent * CFrame.new(0, 0, -straight) * DISC, color, nil, Enum.PartType.Cylinder)
+end
+
+-- Boots welded to the feet, so they follow the riding pose. Ski boots add a shin cuff.
+local function buildBoots(character: Model, model: Model, color: Color3, cuff: boolean)
+	for _, side in { "Left", "Right" } do
+		local foot = character:FindFirstChild(side .. "Foot") :: BasePart?
+		if foot then
+			local size = foot.Size
+			-- Sole sits a little below the foot, onto the binding
+			local height = size.Y + 0.3
+			attach(foot, model, "Boot", Vector3.new(size.X + 0.08, height, size.Z + 0.14), CFrame.new(0, (height - size.Y) / 2 - 0.1, 0), color)
+		end
+		local shin = character:FindFirstChild(side .. "LowerLeg") :: BasePart?
+		if cuff and shin then
+			local size = shin.Size
+			local height = math.min(0.65, size.Y * 0.5)
+			attach(shin, model, "BootCuff", Vector3.new(size.X + 0.1, height, size.Z + 0.1), CFrame.new(0, -size.Y / 2 + height / 2, 0), color)
+		end
+	end
+end
+
 local function buildSkis(root: BasePart, model: Model, spec, footY: number)
+	local thickness = spec.Thickness
+	local y = footY - BASE_DROP + thickness / 2 -- ski base on the snow
+	local top = y + thickness / 2
+	local riser = footY - 0.1 - top -- binding plate fills the gap up to the boot sole
+	local length = spec.Length
+	local centerZ = -spec.MountOffset -- boot slightly behind the ski's centre
+
 	for _, side in { -1, 1 } do
 		local x = side * spec.Spacing / 2
-		weldedPart(root, model, "Ski", spec.Size, CFrame.new(x, footY, -0.4), spec.Color)
-		-- Upturned tip
-		local tipLength = 0.9
-		weldedPart(
-			root,
-			model,
-			"SkiTip",
-			Vector3.new(spec.Size.X, spec.Size.Y, tipLength),
-			CFrame.new(x, footY, -0.4 - spec.Size.Z / 2) * CFrame.Angles(math.rad(30), 0, 0) * CFrame.new(0, 0, -tipLength / 2),
-			spec.Color
-		)
+		local center = CFrame.new(x, y, centerZ)
+		-- Waist, with wider forebody and tail sections (sidecut)
+		attach(root, model, "Ski", Vector3.new(spec.Width, thickness, length), center, spec.Color)
+		local fore, aft = length * 0.22, length * 0.16
+		attach(root, model, "SkiShovel", Vector3.new(spec.ShovelWidth, thickness, fore), center * CFrame.new(0, 0, -length / 2 + fore / 2), spec.Color)
+		attach(root, model, "SkiTailSection", Vector3.new(spec.ShovelWidth * 0.95, thickness, aft), center * CFrame.new(0, 0, length / 2 - aft / 2), spec.Color)
+		-- Rounded tip and tail
+		roundedEnd(root, model, "SkiTip", center * CFrame.new(0, 0, -length / 2), spec.ShovelWidth, thickness, spec.TipLength, spec.TipAngle, spec.Color)
+		roundedEnd(root, model, "SkiTail", center * CFrame.new(0, 0, length / 2) * CFrame.Angles(0, math.pi, 0), spec.ShovelWidth * 0.95, thickness, spec.TailLength, spec.TailAngle, spec.Color)
+		-- Top-sheet stripe
+		attach(root, model, "SkiStripe", Vector3.new(spec.Width * 0.3, 0.012, length * 0.8), center * CFrame.new(0, thickness / 2 + 0.006, 0), spec.StripeColor)
+		-- Binding: plate under the boot, toe and heel pieces
+		if riser > 0.01 then
+			attach(root, model, "BindingPlate", Vector3.new(spec.Width * 0.9, riser, 1.3), CFrame.new(x, top + riser / 2, 0), spec.BindingColor)
+		end
+		attach(root, model, "BindingToe", Vector3.new(spec.Width + 0.04, 0.2, 0.32), CFrame.new(x, footY - 0.05, -0.72), spec.BindingColor)
+		attach(root, model, "BindingHeel", Vector3.new(spec.Width + 0.04, 0.26, 0.4), CFrame.new(x, footY - 0.02, 0.76), spec.BindingColor)
+	end
+end
+
+local function buildBoard(root: BasePart, model: Model, spec, footY: number)
+	local thickness = spec.Thickness
+	local y = footY - BASE_DROP + thickness / 2
+	local top = y + thickness / 2
+	local kick = spec.KickLength
+	local flat = spec.Length - 2 * kick * math.cos(rad(spec.KickAngle))
+	local center = CFrame.new(0, y, 0)
+
+	attach(root, model, "Board", Vector3.new(spec.Width, thickness, flat), center, spec.Color)
+	-- Dark base and edges peeking out underneath
+	attach(root, model, "BoardBase", Vector3.new(spec.Width + 0.03, 0.03, flat), center * CFrame.new(0, -thickness / 2 - 0.01, 0), spec.BaseColor)
+	roundedEnd(root, model, "BoardNose", center * CFrame.new(0, 0, -flat / 2), spec.Width, thickness, kick, spec.KickAngle, spec.Color)
+	roundedEnd(root, model, "BoardTail", center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.Width, thickness, kick, spec.KickAngle, spec.Color)
+
+	-- Bindings: baseplate, highback on the heel side, ankle and toe straps.
+	-- Regular stance faces +X (right of travel), so the heel side is -X.
+	local plate = math.max(footY - 0.1 - top, 0.05)
+	for _, z in { -1, 1 } do
+		local bz = z * spec.BindingSpacing / 2
+		attach(root, model, "BindingBase", Vector3.new(1.15, plate, 0.95), CFrame.new(0, top + plate / 2, bz), spec.BindingColor)
+		attach(root, model, "Highback", Vector3.new(0.12, 0.85, 0.85), CFrame.new(-0.6, footY + 0.32, bz) * CFrame.Angles(0, 0, rad(-12)), spec.BindingColor)
+		attach(root, model, "AnkleStrap", Vector3.new(0.5, 0.1, 1.12), CFrame.new(-0.12, footY + 0.42, bz), spec.StrapColor)
+		attach(root, model, "ToeStrap", Vector3.new(0.22, 0.08, 1.1), CFrame.new(0.42, footY + 0.25, bz), spec.StrapColor)
 	end
 end
 
@@ -89,20 +175,6 @@ local function buildPoles(character: Model, model: Model, spec)
 	end
 end
 
-local function buildBoard(root: BasePart, model: Model, spec, footY: number)
-	weldedPart(root, model, "Board", spec.Size, CFrame.new(0, footY, 0), spec.Color)
-	for _, z in { -1, 1 } do
-		weldedPart(
-			root,
-			model,
-			"Binding",
-			Vector3.new(1.1, 0.35, 0.7),
-			CFrame.new(0, footY + 0.25, z * 0.9),
-			Color3.fromRGB(30, 30, 35)
-		)
-	end
-end
-
 function EquipmentService.Unequip(character: Model)
 	local existing = character:FindFirstChild(Constants.EquipmentModelName)
 	if existing then
@@ -122,8 +194,9 @@ function EquipmentService.Equip(character: Model, sportId: string)
 	local model = Create("Model", { Name = Constants.EquipmentModelName })
 	model:SetAttribute("Sport", sportId)
 	local spec = sport.Equipment
-	local footY = -CharacterUtil.GetFootOffset(character) - MovementConfig.EquipmentThickness / 2
+	local footY = -CharacterUtil.GetFootOffset(character) -- bottom of the feet, in root space
 
+	buildBoots(character, model, spec.BootColor, spec.Kind == "Skis")
 	if spec.Kind == "Skis" then
 		buildSkis(root, model, spec, footY)
 		if spec.Poles then

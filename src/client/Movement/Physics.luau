@@ -124,15 +124,35 @@ function Physics.Grounded(state, ground, intent, stats, config, rideHeight: numb
 	return velocity + normal * correction
 end
 
+-- Signed yaw (radians) from a to b, both flat directions; positive = b is to the left of a.
+local function signedYaw(a: Vector3, b: Vector3): number
+	return math.atan2(a:Cross(b).Y, a:Dot(b))
+end
+
 function Physics.Airborne(state, intent, config, dt: number): Vector3
 	local velocity = state.Velocity - WORLD_UP * config.AirGravity * dt
 	local speed = velocity.Magnitude
 	if speed > 1e-3 then
 		velocity *= math.max(speed - config.AirDragCoefficient * speed * speed * dt, 0) / speed
 	end
-	if not intent.Coast then
-		turnHeading(state, intent.Steer, config.AirTurnRate, dt)
+
+	-- Spin: A/D drive a spin rate that builds and slows smoothly
+	local air = config.Air
+	local steer = if intent.Coast then 0 else intent.Steer
+	local targetRate = -steer * air.SpinRate -- positive yaw = turning left
+	local maxStep = air.SpinAcceleration * dt
+	state.SpinRate += math.clamp(targetRate - state.SpinRate, -maxStep, maxStep)
+	local yaw = state.SpinRate * dt
+
+	-- Landing assist: with A/D released and the spin settled, turn toward the travel direction
+	local travel = Physics.Flatten(velocity)
+	if math.abs(steer) < 0.1 and math.abs(state.SpinRate) < air.AlignRate and travel then
+		local toTravel = signedYaw(state.Heading, travel)
+		yaw += math.clamp(toTravel, -air.AlignRate * dt, air.AlignRate * dt)
 	end
+
+	state.Heading = (CFrame.Angles(0, yaw, 0) * state.Heading).Unit
+	state.AirSpin += yaw
 	state.Velocity = velocity
 	state.Forward = projectOnPlane(state.Heading, state.Up).Unit
 	return velocity

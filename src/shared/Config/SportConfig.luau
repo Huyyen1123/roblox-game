@@ -21,9 +21,22 @@ local Sports = {
 		AccentColor = Color3.fromRGB(230, 70, 70),
 		Equipment = {
 			Kind = "Skis",
+			-- Proportioned to a ~5.6-stud R15 avatar: a long, narrow, thin ski (narrower than
+			-- the boot, as in real life) with a rounded, upturned tip and a small tail kick.
 			Color = Color3.fromRGB(220, 50, 50),
-			Size = Vector3.new(0.35, 0.18, 6.5),
+			StripeColor = Color3.fromRGB(245, 245, 245),
+			Length = 6.8, -- flat running length (the tip kick adds ~0.8 more)
+			Width = 0.42, -- waist, under the boot
+			ShovelWidth = 0.52, -- tip and tail are wider (sidecut)
+			Thickness = 0.08,
+			TipLength = 0.8,
+			TipAngle = 24, -- degrees the tip turns up
+			TailLength = 0.35,
+			TailAngle = 10,
+			MountOffset = 0.3, -- boot sits slightly behind the ski's centre
 			Spacing = 1.3, -- matches the hip-width riding stance so each ski sits under a foot
+			BindingColor = Color3.fromRGB(35, 35, 40),
+			BootColor = Color3.fromRGB(40, 44, 52),
 			Poles = {
 				Length = 3.8,
 				ShaftColor = Color3.fromRGB(190, 195, 205),
@@ -41,8 +54,19 @@ local Sports = {
 		AccentColor = Color3.fromRGB(60, 140, 235),
 		Equipment = {
 			Kind = "Board",
+			-- Proportioned to a ~5.6-stud R15 avatar: a bit wider than the feet are long, thin,
+			-- with a rounded, upturned nose and tail and strap bindings.
 			Color = Color3.fromRGB(40, 110, 220),
-			Size = Vector3.new(1.4, 0.2, 5.6),
+			BaseColor = Color3.fromRGB(20, 22, 28), -- edges and base
+			Length = 6.6, -- tip to tail, including the kicks
+			Width = 1.45,
+			Thickness = 0.1,
+			KickLength = 1.1, -- length of each upturned end (nose and tail)
+			KickAngle = 16,
+			BindingSpacing = 1.8, -- stance width between binding centres
+			BindingColor = Color3.fromRGB(30, 30, 35),
+			StrapColor = Color3.fromRGB(70, 72, 80),
+			BootColor = Color3.fromRGB(50, 50, 58),
 		},
 	},
 }

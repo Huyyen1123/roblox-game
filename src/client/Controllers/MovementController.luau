@@ -48,7 +48,7 @@ local MovementController = {}
 MovementController.Activated = Signal.new()
 MovementController.Deactivated = Signal.new()
 MovementController.ModeChanged = Signal.new() -- (newMode, oldMode)
-MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime)
+MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime, spinDegrees)
 MovementController.Stumbled = Signal.new() -- (reason: "Landing" | "Bump" | "Recovery")
 MovementController.Crashed = Signal.new() -- wipeout (reason: "Collision" | "BadLanding")
 MovementController.Jumped = Signal.new() -- (charge: number 0..1)
@@ -70,6 +70,8 @@ local state = {
 	Grounded = false,
 	JumpCharge = 0, -- 0..1 while Jump is held on the ground
 	AirTime = 0,
+	SpinRate = 0, -- radians/s of airborne yaw (A/D in the air)
+	AirSpin = 0, -- radians spun since leaving the ground (signed)
 	SlopeAngle = 0,
 	CoastDeceleration = 0,
 	Root = nil :: BasePart?,
@@ -231,7 +233,7 @@ local function touchDown(normal: Vector3)
 	if result.Heading then
 		state.Heading = result.Heading
 	end
-	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime)
+	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)))
 	if result.Stumble then
 		startStumble("Landing")
 	end
@@ -376,6 +378,8 @@ local function step(dt: number)
 		state.Grounded = true
 		timeSinceGrounded = 0
 		state.AirTime = 0
+		state.SpinRate = 0
+		state.AirSpin = 0
 		state.SlopeAngle = math.deg(math.acos(math.clamp(ground.Normal.Y, -1, 1)))
 		command = Physics.Grounded(state, ground, intent, stats, Config, rideHeight, dt)
 	else
@@ -433,6 +437,8 @@ local function resetTimers()
 	stumbleTimer = 0
 	wipeoutTimer = 0
 	state.CoastDeceleration = 0
+	state.SpinRate = 0
+	state.AirSpin = 0
 	state.JumpCharge = 0
 	state.Tuck = 0
 	skipLandingCheck = true

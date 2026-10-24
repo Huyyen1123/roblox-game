@@ -177,7 +177,7 @@ function RiderPose:Update(dt: number, input)
 		Torso = lerp(style.TorsoPitch, style.TuckTorsoPitch, tuck),
 		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck),
 		Elbow = lerp(style.Elbow, style.TuckElbow, tuck),
-		ArmOut = armOut,
+		ArmOut = armOut + (if input.Air then style.AirArmOut else 0),
 		Wrist = lerp(style.Wrist, style.TuckWrist, tuck),
 		Turn = if input.Air then 0 else steer,
 		Absorb = absorb,
@@ -242,9 +242,13 @@ function RiderPose:Apply()
 
 	local armOut = rad(current.ArmOut)
 	local elbow = rad(current.Elbow)
+	-- Through a carve the inside hand drives forward and the outside arm lifts for balance
 	local function arm(shoulder, elbowJoint, wrist, side: number, plantAmount: number)
-		local forward = rad(current.ArmForward + style.PlantForward * plantAmount)
-		shoulder.Transform = CFrame.Angles(0, 0, side * armOut) * CFrame.Angles(forward, 0, 0)
+		local inside = math.max(turn * side, 0)
+		local outside = math.max(-turn * side, 0)
+		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside)
+		local out = armOut + rad(style.CarveArmOut * outside)
+		shoulder.Transform = CFrame.Angles(0, 0, side * out) * CFrame.Angles(forward, 0, 0)
 		elbowJoint.Transform = CFrame.Angles(elbow, 0, 0)
 		wrist.Transform = CFrame.Angles(rad(current.Wrist + style.PlantWrist * plantAmount), 0, 0)
 	end

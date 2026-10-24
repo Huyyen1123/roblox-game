@@ -18,8 +18,9 @@ return {
 
 	-- Gravity along the snow (sets acceleration and terminal speeds on slopes)
 	SlopeGravity = 110,
-	-- Gravity while airborne
-	AirGravity = 110,
+	-- Gravity while airborne. Lower than on the snow so jumps hang in the air longer
+	-- (more time for tricks) without changing riding speeds.
+	AirGravity = 75,
 	MaxSpeed = 220,
 
 	-- Speed loss on the snow: drag·v² + friction·SlopeGravity·cos θ (+ turning, + braking)
@@ -61,8 +62,8 @@ return {
 	},
 
 	Jump = {
-		HopPower = 20, -- tap: small hop
-		FullPower = 38, -- full charge (the prototype's jump power)
+		HopPower = 15, -- tap: small hop (~1.5 studs)
+		FullPower = 36, -- full charge: ~8.6 studs high, ~1 s of air on flat ground
 		ChargeTime = 0.55, -- seconds of holding for a full charge
 		UpBias = 0.35, -- 0 = along slope normal, 1 = straight up
 		Cooldown = 0.3,
@@ -72,8 +73,14 @@ return {
 
 	-- Airborne
 	AirDragCoefficient = 0.0015,
-	AirTurnRate = 3.2,
 	AirLevelingRate = 2,
+	Air = {
+		SpinRate = 7.5, -- radians/s at full A/D (~430°/s: a 360 in under a second)
+		SpinAcceleration = 30, -- how fast a spin builds and slows (smooth, not instant)
+		-- With A/D released, the rider rotates toward the travel direction, finishing a
+		-- nearly-complete spin or unwinding a small one, so landings line up naturally.
+		AlignRate = 3.5,
+	},
 
 	-- Ground following
 	HoverStiffness = 14,
@@ -85,8 +92,8 @@ return {
 	NormalSmoothing = 14,
 	MaxGroundAngle = 55,
 
-	-- Visual lean into turns
-	LeanAngle = 18,
+	-- Visual lean into turns (the whole body and the skis/board tilt onto their edges)
+	LeanAngle = 26,
 	LeanSpeedRef = 80,
 
 	Landing = {
@@ -128,7 +135,7 @@ return {
 
 	Orientation = {
 		GroundResponsiveness = 35,
-		AirResponsiveness = 14,
+		AirResponsiveness = 30, -- crisp enough to follow fast spins
 		MaxTorque = 1e7,
 	},
 
