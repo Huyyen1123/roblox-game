@@ -86,14 +86,15 @@ local function localInput()
 	local state = Movement.State
 	return {
 		Tuck = state.Tuck,
-		Air = not state.Grounded and state.Mode == "Airborne",
+		Air = state.TrickAir and state.Mode == "Airborne",
 		Brake = state.Braking or state.Mode == "Wipeout",
 		Charge = state.JumpCharge,
 		Steer = state.Steer,
 		Stumble = state.Mode == "Stumbling" or state.Mode == "Wipeout",
-		Press = state.Press,
+		Tweak = state.Tweak,
 		Grab = state.Grab,
 		Speed = state.Speed,
+		TimeToLand = state.TimeToLand,
 	}
 end
 
@@ -105,7 +106,7 @@ local function remoteInput(character: Model)
 		Charge = character:GetAttribute("RiderCharge") or 0,
 		Steer = character:GetAttribute("RiderSteer") or 0,
 		Stumble = character:GetAttribute("RiderStumble") == true,
-		Press = character:GetAttribute("RiderPress") or 0,
+		Tweak = character:GetAttribute("RiderTweak") or 0,
 		Grab = character:GetAttribute("RiderGrab") or 0,
 	}
 end
@@ -119,7 +120,7 @@ local function replicate(input)
 		Air = input.Air,
 		Brake = input.Brake,
 		Stumble = input.Stumble,
-		Press = input.Press,
+		Tweak = input.Tweak,
 		Grab = input.Grab,
 	}
 	local now = os.clock()
@@ -133,7 +134,7 @@ local function replicate(input)
 		and lastSent.Air == packet.Air
 		and lastSent.Brake == packet.Brake
 		and lastSent.Stumble == packet.Stumble
-		and lastSent.Press == packet.Press
+		and lastSent.Tweak == packet.Tweak
 		and lastSent.Grab == packet.Grab
 	then
 		return

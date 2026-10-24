@@ -105,11 +105,10 @@ return {
 			IdleKnee = 1.6, -- degrees of slow knee bob
 			IdleSway = 1.5, -- degrees of torso sway
 			IdleArm = 5, -- degrees of arm drift
-			-- Presses and butters (visual only; no speed change)
-			PressAngle = 11, -- degrees the board bends up off the snow
-			PressHipShift = 0.35, -- weight moves over the pressed end
-			PressCrouch = 6,
-			ButterYaw = 16, -- degrees the board pivots with steering while pressing
+			-- In the air only: W/S tweak the nose or tail up (board pitches about its centre)
+			TweakAngle = 22,
+			TweakHipShift = 0.25, -- weight moves toward the raised end
+			TweakCrouch = 8,
 			-- Air
 			AirLift = 0.35, -- board comes up toward the body (knees tuck)
 			AirTilt = 8, -- degrees the board tilts with steering in the air
@@ -126,6 +125,12 @@ return {
 			MethodTilt = 38, -- heel edge up, board shown off behind
 			MethodPitch = 14, -- nose up
 			GrabResponsiveness = 11,
+			-- On the snow, air-only channels (board lift, tilt, tweaks, grabs) return this fast,
+			-- so the board is back flat on the snow right at touchdown
+			GroundSnapResponsiveness = 40,
+			-- Landing prep: over this many seconds before touchdown the board levels out and
+			-- comes back to the feet (grabs released), so it meets the snow flat
+			LandingPrepTime = 0.22,
 			-- Braking: hard heel-side skid, board swung across the fall line
 			BrakeEdge = 0.85,
 			SkidYaw = 14,

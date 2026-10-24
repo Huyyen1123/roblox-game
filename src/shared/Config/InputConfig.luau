@@ -7,8 +7,8 @@
 	  Steer     – axis from keys, the left stick, or touch.
 	  Held      – true while any bound input is down (Tuck, Brake, Push).
 	  Actions   – discrete presses/releases (Jump, ToggleCamera, Reset, Zoom).
-	Snowboard tricks: Q/E/F grab in the air (indy, melon, method); W/S nose/tail press on the
-	snow (W only presses above push speed). A/D spin in the air.
+	Snowboard tricks (in the air only): Q/E/F grab (indy, melon, method), W/S tweak the
+	nose/tail up, A/D spin. On the snow W pushes and S does nothing.
 	Reserved for Phase 4: W/S flip in the air.
 ]]
 
@@ -30,7 +30,7 @@ return {
 		Push = {
 			Keys = { Enum.KeyCode.W, Enum.KeyCode.Up },
 		},
-		TailPress = {
+		TailTweak = {
 			Keys = { Enum.KeyCode.S, Enum.KeyCode.Down },
 		},
 		GrabIndy = {

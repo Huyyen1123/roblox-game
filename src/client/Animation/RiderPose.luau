@@ -65,7 +65,9 @@ local JOINTS = {
 
 local EASED = { "Crouch", "Torso", "ArmForward", "Elbow", "ArmOut", "Wrist", "Turn", "Absorb", "Brake" }
 -- Snowboard-only channels (stay at 0 for skis)
-local BOARD_EASED = { "Edge", "Press", "Spin", "AirTilt", "Lift" }
+local BOARD_EASED = { "Edge", "Tweak", "Spin", "AirTilt", "Lift" }
+-- Channels that only exist in the air: snapped back on the snow so the board never floats
+local AIR_ONLY = { Tweak = true, AirTilt = true, Lift = true }
 local GRABS = { "Indy", "Melon", "Method" }
 
 -- Legs never straighten past this share of their length (keeps the knee solution stable)
@@ -252,9 +254,10 @@ function RiderPose:Update(dt: number, input)
 	end
 	crouch += style.ChargeCrouch * charge + self.LandingCrouch
 
-	-- Snowboard: toe/heel carve depth grows with speed; presses and grabs
+	-- Snowboard: toe/heel carve depth grows with speed; tweaks and grabs in the air
 	local board = style.Board
-	local edge, press, grabTargets = 0, 0, { Indy = 0, Melon = 0, Method = 0 }
+	local edge, tweak, grabTargets = 0, 0, { Indy = 0, Melon = 0, Method = 0 }
+	local landingPrep = 0
 	if board then
 		local depth = math.clamp((input.Speed or 0) / board.CarveFullSpeed, board.CarveMinDepth, 1)
 		-- Regular riders face right of travel, so a right turn is on the toe edge
@@ -263,12 +266,16 @@ function RiderPose:Update(dt: number, input)
 		if input.Brake and not input.Air then
 			edge = math.clamp(edge - board.BrakeEdge, -1, 1)
 		end
-		press = if input.Air then 0 else math.clamp(input.Press or 0, -1, 1)
-		local grab = if input.Air then GRABS[input.Grab or 0] else nil
+		tweak = if input.Air then math.clamp(input.Tweak or 0, -1, 1) else 0
+		-- Just before touchdown the board levels out and grabs release
+		local prep = math.clamp(1 - (input.TimeToLand or math.huge) / board.LandingPrepTime, 0, 1)
+		landingPrep = prep
+		tweak *= 1 - prep
+		local grab = if input.Air and prep < 0.5 then GRABS[input.Grab or 0] else nil
 		if grab then
 			grabTargets[grab] = 1
 		end
-		crouch += math.max(edge, 0) * board.ToeCrouch + math.max(-edge, 0) * board.HeelCrouch + math.abs(press) * board.PressCrouch
+		crouch += math.max(edge, 0) * board.ToeCrouch + math.max(-edge, 0) * board.HeelCrouch + math.abs(tweak) * board.TweakCrouch
 		if grab then
 			crouch += board.GrabCrouch
 		end
@@ -300,10 +307,10 @@ function RiderPose:Update(dt: number, input)
 		Absorb = absorb,
 		Brake = if input.Brake and not input.Air then 1 else 0,
 		Edge = edge,
-		Press = press,
+		Tweak = tweak,
 		Spin = if input.Air then input.Spin or 0 else 0,
-		AirTilt = if input.Air then steer else 0,
-		Lift = if input.Air then 1 else 0,
+		AirTilt = if input.Air then steer * (1 - landingPrep) else 0,
+		Lift = if input.Air then 1 - landingPrep else 0,
 		Indy = grabTargets.Indy,
 		Melon = grabTargets.Melon,
 		Method = grabTargets.Method,
@@ -324,10 +331,13 @@ function RiderPose:Update(dt: number, input)
 		current[key] += (targets[key] - current[key]) * rate
 	end
 	if board then
+		local snapAlpha = 1 - math.exp(-board.GroundSnapResponsiveness * dt)
 		for _, key in BOARD_EASED do
-			current[key] += (targets[key] - current[key]) * alpha
+			local rate = if AIR_ONLY[key] and (not input.Air or landingPrep > 0) then snapAlpha else alpha
+			current[key] += (targets[key] - current[key]) * rate
 		end
-		local grabAlpha = 1 - math.exp(-board.GrabResponsiveness * dt)
+		local grabRate = if input.Air and landingPrep <= 0 then board.GrabResponsiveness else board.GroundSnapResponsiveness
+		local grabAlpha = 1 - math.exp(-grabRate * dt)
 		for _, key in GRABS do
 			current[key] += (targets[key] - current[key]) * grabAlpha
 		end
@@ -487,7 +497,8 @@ function RiderPose:BoardJoint(): Motor6D?
 end
 
 --[[
-	Snowboard pose. The board can move on its joint (presses, butters, air tweaks, grabs) and
+	Snowboard pose. The board can move on its joint (braking skid, and in the air: lift, tilt,
+	tweaks, grabs) and
 	the feet are solved onto its bindings wherever it goes. Toe-side carves drive the hips and
 	knees over the toes with the chest folded forward; heel-side carves sit low and back with
 	the shoulders open down the hill and the rear hand sweeping toward the snow. In the air the
@@ -506,35 +517,32 @@ function RiderPose:ApplyBoard()
 	local toeSign = -stance -- regular faces +X: toes toward +X, nose on the body's left
 	local edge = current.Edge
 	local toe, heel = math.max(edge, 0), math.max(-edge, 0)
-	local press = current.Press
+	local tweak = current.Tweak
 	local indy, melon, method = current.Indy, current.Melon, current.Method
 	local grab = math.min(indy + melon + method, 1)
 	local idle = if self.Air then 0 else 1
 
-	-- Board tweak (board space). Presses pivot on the end that stays on the snow and butter
-	-- with steering; in the air the board rises to the body and tilts with steering and grabs.
-	local half = self.BoardFlat / 2
-	local pivot = CFrame.new(0, -spec.Thickness / 2, if press >= 0 then -half else half)
-	local butter = rad(cfg.ButterYaw) * -current.Turn * math.abs(press)
-	local pressRot = pivot * CFrame.Angles(0, butter, 0) * CFrame.Angles(-rad(cfg.PressAngle) * press, 0, 0) * pivot:Inverse()
+	-- Board tweak (board space). On the snow the board stays flat on its base (it only edges
+	-- with the body lean and skids when braking); in the air it rises to the body, tilts with
+	-- steering and grabs, and W/S tweak the nose or tail up.
 	local roll = toeSign * rad(cfg.IndyTilt * indy - cfg.MelonTilt * melon - cfg.MethodTilt * method)
 		- rad(cfg.AirTilt) * current.AirTilt
 	local lift = cfg.AirLift * current.Lift + cfg.GrabLift * grab
 	local skid = CFrame.Angles(0, toeSign * rad(cfg.SkidYaw) * current.Brake, 0)
-	local tweak = skid
+	local boardOffset = skid
 		* CFrame.new(0, lift, 0)
 		* CFrame.Angles(rad(cfg.MethodPitch) * method, 0, 0)
 		* CFrame.Angles(0, 0, roll)
-		* pressRot
+		* CFrame.Angles(rad(cfg.TweakAngle) * tweak, 0, 0)
 
 	local boardJoint = self:BoardJoint()
 	local boardC0 = if boardJoint then boardJoint.C0 else CFrame.identity
 	if boardJoint then
-		boardJoint.Transform = tweak
+		boardJoint.Transform = boardOffset
 	else
-		tweak = CFrame.identity
+		boardOffset = CFrame.identity
 	end
-	local boardFrame = boardC0 * tweak
+	local boardFrame = boardC0 * boardOffset
 
 	-- Feet: across the board in the bindings, wherever the board is
 	local bodyYaw = CFrame.Angles(0, rad(style.StanceYaw) * stance, 0)
@@ -545,10 +553,10 @@ function RiderPose:ApplyBoard()
 	local leftTarget = onBoard(CFrame.new(0, self.FootCenterY, leftZ) * bodyYaw)
 	local rightTarget = onBoard(CFrame.new(0, self.FootCenterY, -leftZ) * bodyYaw)
 
-	-- Pelvis: over the toes or back over the heels, toward a pressed end, with a slow sway
+	-- Pelvis: over the toes or back over the heels, toward a tweaked end, with a slow sway
 	local toeDir = bodyYaw.LookVector
 	local shift = toeDir * (toe * cfg.ToeHipShift - heel * cfg.HeelHipShift + idle * 0.04 * math.sin(t * 1.3))
-		+ Vector3.new(0, 0, -press * cfg.PressHipShift)
+		+ Vector3.new(0, 0, -tweak * cfg.TweakHipShift)
 	local planar = CFrame.new(shift.X, 0, shift.Z)
 	local restLowerTorso = self.RootC0 * planar * bodyYaw * self.RootC1:Inverse()
 	local knees = current.Crouch + current.Absorb + idle * cfg.IdleKnee * (math.sin(t * 1.8) + 0.5 * math.sin(t * 2.9 + 1))
@@ -585,7 +593,7 @@ function RiderPose:ApplyBoard()
 		local arm = self.Arms[side]
 		local isFront = side == frontSide
 		local forward = current.ArmForward + idle * cfg.IdleArm * math.sin(t * 1.1 + side) + toe * cfg.ToeArmForward + spinTuck * 10
-		local out = current.ArmOut - spinTuck * cfg.SpinArmTuck + math.abs(press) * 12
+		local out = current.ArmOut - spinTuck * cfg.SpinArmTuck + math.abs(tweak) * 12
 		local elbow = current.Elbow + spinTuck * 15
 		if isFront then
 			out += heel * cfg.HeelFrontArmOut + indy * 25

@@ -108,7 +108,7 @@ local function hintList()
 		{ "Brake", "Ctrl", "Brake" },
 		{ "Jump", "Space", "Hold to charge jump" },
 		{ "Grab", "Q / E / F", "Grab: indy, melon, method" },
-		{ "Press", "W / S", "Nose / tail press (board)" },
+		{ "Tweak", "W / S", "Nose / tail tweak (in the air)" },
 		{ "Camera", "V", "Camera" },
 		{ "Reset", "R", "Reset" },
 	}
@@ -370,8 +370,8 @@ local function update(dt: number)
 	if state.Grab ~= 0 then
 		learned("Grab")
 	end
-	if state.Press ~= 0 then
-		learned("Press")
+	if state.Tweak ~= 0 then
+		learned("Tweak")
 	end
 	ridingTime += dt
 	if ridingTime > HINT_TIMEOUT then

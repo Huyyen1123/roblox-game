@@ -72,9 +72,15 @@ local state = {
 	AirTime = 0,
 	SpinRate = 0, -- radians/s of airborne yaw (A/D in the air)
 	AirSpin = 0, -- radians spun since leaving the ground (signed)
-	-- Snowboard style inputs (pose only; no effect on speed)
-	Press = 0, -- 1 nose press, -1 tail press, 0 none (on the snow)
-	Grab = 0, -- 0 none, 1 indy, 2 melon, 3 method (in the air)
+	-- Really in the air (for animation and tricks): a jump, or off the snow for longer than
+	-- Air.TrickDelay. Physics uses Grounded; this filters out brief contact losses on bumps.
+	TrickAir = false,
+	-- Seconds until touchdown while falling toward visible ground (math.huge otherwise);
+	-- the pose levels the board just before landing
+	TimeToLand = math.huge,
+	-- Board style inputs, in the air only (pose only; no effect on speed)
+	Tweak = 0, -- 1 nose tweak (W), -1 tail tweak (S), 0 none
+	Grab = 0, -- 0 none, 1 indy, 2 melon, 3 method
 	AirGrab = nil :: string?, -- grab held long enough to count in this jump
 	SlopeAngle = 0,
 	CoastDeceleration = 0,
@@ -179,6 +185,7 @@ end
 ----------------------------------------------------------------------------------------------
 
 local GRAB_NAMES = { "INDY", "MELON", "METHOD" }
+local jumpedThisAir = false
 local GRAB_COUNT_TIME = 0.25
 local grabHeldTime = 0
 
@@ -194,19 +201,19 @@ local function readIntent(dt: number)
 	state.Tucking = state.Tuck > 0.5
 	state.Braking = canAct and Input.IsHeld("Brake")
 
-	-- Presses on the snow (W only presses above push speed, so it still pushes off the start)
-	local press = 0
-	if steady and state.Grounded then
-		if Input.IsHeld("TailPress") then
-			press = -1
-		elseif Input.IsHeld("Push") and state.Speed > Config.Push.MaxSpeed then
-			press = 1
+	-- Board tweaks in the air (W nose, S tail); on the snow W only pushes
+	local tweak = 0
+	if canAct and state.TrickAir then
+		if Input.IsHeld("TailTweak") then
+			tweak = -1
+		elseif Input.IsHeld("Push") then
+			tweak = 1
 		end
 	end
-	state.Press = press
+	state.Tweak = tweak
 	-- Grabs in the air; one held for GrabCountTime counts toward the landing callout
 	local grab = 0
-	if canAct and not state.Grounded then
+	if canAct and state.TrickAir then
 		if Input.IsHeld("GrabMethod") then
 			grab = 3
 		elseif Input.IsHeld("GrabMelon") then
@@ -294,6 +301,8 @@ local function updateJump(dt: number, ground, command: Vector3): Vector3
 			state.Velocity = Physics.JumpVelocity(state.Velocity, normal, power, Config.Jump.UpBias)
 			command = state.Velocity
 			state.Grounded = false
+			state.TrickAir = true
+			jumpedThisAir = true
 			timeSinceGrounded = math.huge
 			jumpCooldown = Config.Jump.Cooldown
 			groundLock = Config.Jump.GroundLock
@@ -347,6 +356,10 @@ local function writeDebug(ground, command: Vector3)
 	root:SetAttribute("DebugJumpCharge", state.JumpCharge)
 	root:SetAttribute("DebugSlope", state.SlopeAngle)
 	root:SetAttribute("DebugGroundDistance", if ground then ground.Distance - rideHeight else -1)
+	root:SetAttribute("DebugGrounded", state.Grounded)
+	root:SetAttribute("DebugTrickAir", state.TrickAir)
+	root:SetAttribute("DebugGrab", state.Grab)
+	root:SetAttribute("DebugTweak", state.Tweak)
 	root:SetAttribute("DebugCommand", command)
 	for name, count in debugCounters do
 		root:SetAttribute("Debug" .. name, count)
@@ -398,6 +411,13 @@ local function step(dt: number)
 
 	-- Ground state
 	local ground = GroundProbe.Probe(root.Position, state.Heading, rideHeight, raycastParams, Config)
+	state.TimeToLand = math.huge
+	if ground and not state.Grounded then
+		local closing = -state.Velocity:Dot(ground.Normal)
+		if closing > 1 then
+			state.TimeToLand = math.max(ground.Distance - rideHeight, 0) / closing
+		end
+	end
 	local wasGrounded = state.Grounded
 	local canGround = false
 	if ground and groundLock <= 0 and ground.Normal.Y >= math.cos(math.rad(Config.MaxGroundAngle)) then
@@ -420,12 +440,15 @@ local function step(dt: number)
 		state.SpinRate = 0
 		state.AirSpin = 0
 		state.AirGrab = nil
+		state.TrickAir = false
+		jumpedThisAir = false
 		state.SlopeAngle = math.deg(math.acos(math.clamp(ground.Normal.Y, -1, 1)))
 		command = Physics.Grounded(state, ground, intent, stats, Config, rideHeight, dt)
 	else
 		state.Grounded = false
 		timeSinceGrounded += dt
 		state.AirTime += dt
+		state.TrickAir = jumpedThisAir or state.AirTime >= Config.Air.TrickDelay
 		command = Physics.Airborne(state, intent, Config, dt)
 	end
 
@@ -477,6 +500,8 @@ local function resetTimers()
 	stumbleTimer = 0
 	wipeoutTimer = 0
 	state.CoastDeceleration = 0
+	state.TrickAir = false
+	jumpedThisAir = false
 	state.SpinRate = 0
 	state.AirSpin = 0
 	state.JumpCharge = 0

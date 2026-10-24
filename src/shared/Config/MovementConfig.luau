@@ -80,6 +80,10 @@ return {
 		-- With A/D released, the rider rotates toward the travel direction, finishing a
 		-- nearly-complete spin or unwinding a small one, so landings line up naturally.
 		AlignRate = 5.5,
+		-- Leaving the snow without jumping (crests, bumps) only counts as being in the air for
+		-- animation and tricks after this long, so small bumps never trigger air poses or grabs.
+		-- A jump counts immediately.
+		TrickDelay = 0.15,
 	},
 
 	-- Ground following
