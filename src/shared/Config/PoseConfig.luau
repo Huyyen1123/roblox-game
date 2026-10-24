@@ -19,7 +19,11 @@ return {
 		Crouch = 30, -- low, athletic stance: hips down, knees well bent
 		TuckCrouch = 56, -- deep tuck
 		AirCrouch = 40, -- knees drawn up in the air
-		ChargeCrouch = 16, -- extra knee load while charging a jump
+		ChargeCrouch = 26, -- extra knee load while charging a jump
+		ChargeTorso = 10, -- chest drops over the knees while charging
+		ChargeArmBack = 28, -- arms (and poles) swing back, ready to throw forward
+		PopCrouch = 4, -- legs snap almost straight at takeoff…
+		PopArmForward = 28, -- …as the arms swing forward
 		BrakeCrouch = 38,
 		TorsoPitch = 24, -- upper body leans forward, down the hill
 		TuckTorsoPitch = 46,
@@ -54,7 +58,11 @@ return {
 		Crouch = 28,
 		TuckCrouch = 44,
 		AirCrouch = 40,
-		ChargeCrouch = 16,
+		ChargeCrouch = 26,
+		ChargeTorso = 12,
+		ChargeArmBack = 18,
+		PopCrouch = 4,
+		PopArmForward = 18,
 		BrakeCrouch = 36,
 		TorsoPitch = 14,
 		TuckTorsoPitch = 24,
@@ -87,6 +95,10 @@ return {
 
 	-- Easing of every joint target (higher = snappier)
 	Responsiveness = 12,
+	-- Jump: loading the knees while charging, then a quick pop (legs extend) at takeoff
+	ChargeResponsiveness = 18,
+	PopDuration = 0.18,
+	PopResponsiveness = 30,
 	-- Extra crouch on landing, per stud/s of impact, and how fast it springs back
 	LandingCompressionPerImpact = 0.5,
 	MaxLandingCompression = 25,

@@ -18,9 +18,9 @@ return {
 
 	-- Gravity along the snow (sets acceleration and terminal speeds on slopes)
 	SlopeGravity = 110,
-	-- Gravity while airborne. Lower than on the snow so jumps hang in the air longer
-	-- (more time for tricks) without changing riding speeds.
-	AirGravity = 75,
+	-- Gravity while airborne. A little lower than on the snow so jumps hang long enough
+	-- for a 360 without feeling floaty.
+	AirGravity = 92,
 	MaxSpeed = 220,
 
 	-- Speed loss on the snow: drag·v² + friction·SlopeGravity·cos θ (+ turning, + braking)
@@ -63,7 +63,7 @@ return {
 
 	Jump = {
 		HopPower = 15, -- tap: small hop (~1.5 studs)
-		FullPower = 36, -- full charge: ~8.6 studs high, ~1 s of air on flat ground
+		FullPower = 36, -- full charge: ~7 studs high, ~0.8 s of air on flat ground
 		ChargeTime = 0.55, -- seconds of holding for a full charge
 		UpBias = 0.35, -- 0 = along slope normal, 1 = straight up
 		Cooldown = 0.3,
@@ -75,11 +75,11 @@ return {
 	AirDragCoefficient = 0.0015,
 	AirLevelingRate = 2,
 	Air = {
-		SpinRate = 7.5, -- radians/s at full A/D (~430°/s: a 360 in under a second)
-		SpinAcceleration = 30, -- how fast a spin builds and slows (smooth, not instant)
+		SpinRate = 9.5, -- radians/s at full A/D (~545°/s: a 360 in about 0.7 s)
+		SpinAcceleration = 50, -- how fast a spin builds and slows (smooth, not instant)
 		-- With A/D released, the rider rotates toward the travel direction, finishing a
 		-- nearly-complete spin or unwinding a small one, so landings line up naturally.
-		AlignRate = 3.5,
+		AlignRate = 5.5,
 	},
 
 	-- Ground following

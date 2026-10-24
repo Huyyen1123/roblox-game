@@ -5,6 +5,7 @@ built by `src/server/Services/EquipmentService.luau` from the sizes in
 `src/shared/Config/SportConfig.luau`. They already have the target proportions. This document
 specifies the final MeshPart replacements, so they drop in without changing gameplay.
 
+Visual reference: the style guide image (blocky Roblox look, gear about as wide as the boots).
 All sizes are in studs for the default R15 avatar (about 5.6 studs tall, feet 1.0 × 0.3 × 1.0).
 1 stud = 0.28 m.
 
@@ -24,14 +25,14 @@ All sizes are in studs for the default R15 avatar (about 5.6 studs tall, feet 1.
 | Property | Value | Notes |
 |---|---|---|
 | Overall length | 7.6 | 6.8 flat running length, plus about 0.8 of tip rise |
-| Waist width | 0.42 | Under the boot; narrower than the boot, as in real life |
-| Shovel/tail width | 0.52 / 0.49 | Sidecut: a smooth curve, not steps |
-| Thickness | 0.08 at the waist | Tapering to about 0.04 at the tip and tail |
+| Waist width | 0.85 | Under the boot (about 0.8 × boot width, per the style guide) |
+| Shovel/tail width | 0.95 / 0.90 | Sidecut: a smooth curve, not steps |
+| Thickness | 0.12 at the waist | Tapering to about 0.06 at the tip and tail; chunky enough for the blocky style |
 | Tip | Rounded, rising 24° over its last 0.8 | Soft rocker curve, not a hinge |
 | Tail | Rounded, rising 10° over its last 0.35 | |
 | Mount point | 0.3 behind the ski's centre | The boot centre sits here |
 | Origin | Ski centre, on the base plane's mid-height | |
-| Bindings | Separate mesh, about 0.46 wide × 0.2–0.26 tall × 1.9 long | Toe piece, heel piece and plate; dark grey and metal |
+| Bindings | Separate mesh, about 0.9 wide × 0.2–0.26 tall × 1.9 long | Toe piece, heel piece and plate; dark grey and metal |
 | Graphic | Top-sheet stripe or graphic area | Recolourable |
 
 ## Snowboard
@@ -39,8 +40,8 @@ All sizes are in studs for the default R15 avatar (about 5.6 studs tall, feet 1.
 | Property | Value | Notes |
 |---|---|---|
 | Overall length | 6.6 | Tip to tail |
-| Waist width | 1.45 | Slightly wider than the boot is long, so toes and heels don't drag |
-| Thickness | 0.1 | |
+| Waist / nose and tail width | 1.45 / 1.65 | Slightly wider than the boot is long, so toes and heels don't drag |
+| Thickness | 0.12 | |
 | Nose and tail | Rounded, rising 16° over 1.1 | Twin shape (same at both ends) |
 | Base | Dark base with metal edges visible in profile | |
 | Bindings | Two at ±0.9 from centre (1.8 stance), with baseplate, highback on the heel side and ankle/toe straps | Angled about +15° / −6° (a duck stance) in the final version |

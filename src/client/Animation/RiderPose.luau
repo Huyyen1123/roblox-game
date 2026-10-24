@@ -119,6 +119,9 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		LastSteer = 0,
 		PlantSide = 0, -- -1 left pole, 1 right pole
 		PlantTime = math.huge,
+		PopTime = math.huge, -- time since takeoff from a charged jump
+		WasAir = false,
+		LastCharge = 0,
 	}, RiderPose)
 end
 
@@ -147,8 +150,18 @@ function RiderPose:Update(dt: number, input)
 	local style = self.Style
 	local tuck = math.clamp(input.Tuck or 0, 0, 1)
 	local steer = math.clamp(input.Steer or 0, -1, 1)
+	local charge = math.clamp(input.Charge or 0, 0, 1)
 	self.Clock += dt
 	self.PlantTime += dt
+	self.PopTime += dt
+
+	-- Takeoff from a charged jump: the legs pop straight and the arms throw forward
+	if input.Air and not self.WasAir and self.LastCharge > 0.05 then
+		self.PopTime = 0
+	end
+	self.WasAir = input.Air
+	self.LastCharge = charge
+	local popping = self.PopTime < PoseConfig.PopDuration
 	self.LandingCrouch *= math.exp(-PoseConfig.LandingRecovery * dt)
 	self:DetectPolePlant(steer, input.Air)
 
@@ -160,7 +173,10 @@ function RiderPose:Update(dt: number, input)
 	if input.Air then
 		crouch = math.max(crouch, style.AirCrouch)
 	end
-	crouch += style.ChargeCrouch * math.clamp(input.Charge or 0, 0, 1) + self.LandingCrouch
+	crouch += style.ChargeCrouch * charge + self.LandingCrouch
+	if popping then
+		crouch = style.PopCrouch
+	end
 
 	local armOut = style.ArmOut
 	if input.Stumble then
@@ -174,8 +190,10 @@ function RiderPose:Update(dt: number, input)
 
 	local targets = {
 		Crouch = math.min(crouch, 70),
-		Torso = lerp(style.TorsoPitch, style.TuckTorsoPitch, tuck),
-		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck),
+		Torso = lerp(style.TorsoPitch, style.TuckTorsoPitch, tuck) + style.ChargeTorso * charge,
+		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck)
+			- style.ChargeArmBack * charge
+			+ (if popping then style.PopArmForward else 0),
 		Elbow = lerp(style.Elbow, style.TuckElbow, tuck),
 		ArmOut = armOut + (if input.Air then style.AirArmOut else 0),
 		Wrist = lerp(style.Wrist, style.TuckWrist, tuck),
@@ -184,7 +202,13 @@ function RiderPose:Update(dt: number, input)
 	}
 
 	-- Ease toward targets so states blend instead of snapping
-	local alpha = 1 - math.exp(-PoseConfig.Responsiveness * dt)
+	local responsiveness = PoseConfig.Responsiveness
+	if popping then
+		responsiveness = PoseConfig.PopResponsiveness
+	elseif charge > 0 then
+		responsiveness = PoseConfig.ChargeResponsiveness
+	end
+	local alpha = 1 - math.exp(-responsiveness * dt)
 	local absorbAlpha = 1 - math.exp(-PoseConfig.AbsorbResponsiveness * dt)
 	local current = self.Current
 	for _, key in EASED do

@@ -121,10 +121,15 @@ local function buildBoard(root: BasePart, model: Model, spec, footY: number)
 	local center = CFrame.new(0, y, 0)
 
 	attach(root, model, "Board", Vector3.new(spec.Width, thickness, flat), center, spec.Color)
+	-- Wider nose and tail sections (sidecut)
+	local section = flat * 0.2
+	for _, z in { -1, 1 } do
+		attach(root, model, "BoardSection", Vector3.new(spec.NoseWidth, thickness, section), center * CFrame.new(0, 0, z * (flat - section) / 2), spec.Color)
+	end
 	-- Dark base and edges peeking out underneath
 	attach(root, model, "BoardBase", Vector3.new(spec.Width + 0.03, 0.03, flat), center * CFrame.new(0, -thickness / 2 - 0.01, 0), spec.BaseColor)
-	roundedEnd(root, model, "BoardNose", center * CFrame.new(0, 0, -flat / 2), spec.Width, thickness, kick, spec.KickAngle, spec.Color)
-	roundedEnd(root, model, "BoardTail", center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.Width, thickness, kick, spec.KickAngle, spec.Color)
+	roundedEnd(root, model, "BoardNose", center * CFrame.new(0, 0, -flat / 2), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
+	roundedEnd(root, model, "BoardTail", center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
 
 	-- Bindings: baseplate, highback on the heel side, ankle and toe straps.
 	-- Regular stance faces +X (right of travel), so the heel side is -X.
