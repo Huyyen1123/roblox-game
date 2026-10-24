@@ -9,6 +9,7 @@
 	client-side arm pose: trailing while riding, tucked under the arms, planting on turns.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
@@ -133,7 +134,7 @@ end
 -- The board hangs off one Motor6D ("BoardJoint") on the HumanoidRootPart; every other board
 -- part is welded to the main Board part. The riding pose drives the joint for presses,
 -- butters and in-air tweaks, and solves both feet onto the bindings wherever the board goes.
-local function buildBoard(root: BasePart, model: Model, spec, footY: number)
+local function buildBoard(root: BasePart, model: Model, spec, footY: number, stance: string?)
 	local thickness = spec.Thickness
 	local y = footY - BASE_DROP + thickness / 2
 	local top = y + thickness / 2
@@ -162,14 +163,15 @@ local function buildBoard(root: BasePart, model: Model, spec, footY: number)
 	roundedEnd(board, model, "BoardTail", mount * center * CFrame.new(0, 0, flat / 2) * CFrame.Angles(0, math.pi, 0), spec.NoseWidth, thickness, kick, spec.KickAngle, spec.Color)
 
 	-- Bindings: baseplate, highback on the heel side, ankle and toe straps.
-	-- Regular stance faces +X (right of travel), so the heel side is -X.
+	-- Regular stance faces +X (right of travel), so the heel side is -X; goofy is mirrored.
+	local heel = if stance == "Goofy" then 1 else -1
 	local plate = math.max(footY - 0.1 - top, 0.05)
 	for _, z in { -1, 1 } do
 		local bz = z * spec.BindingSpacing / 2
 		part("BindingBase", Vector3.new(1.15, plate, 0.95), CFrame.new(0, top + plate / 2, bz), spec.BindingColor)
-		part("Highback", Vector3.new(0.12, 0.85, 0.85), CFrame.new(-0.6, footY + 0.32, bz) * CFrame.Angles(0, 0, rad(-12)), spec.BindingColor)
-		part("AnkleStrap", Vector3.new(0.5, 0.1, 1.12), CFrame.new(-0.12, footY + 0.42, bz), spec.StrapColor)
-		part("ToeStrap", Vector3.new(0.22, 0.08, 1.1), CFrame.new(0.42, footY + 0.25, bz), spec.StrapColor)
+		part("Highback", Vector3.new(0.12, 0.85, 0.85), CFrame.new(0.6 * heel, footY + 0.32, bz) * CFrame.Angles(0, 0, rad(12 * heel)), spec.BindingColor)
+		part("AnkleStrap", Vector3.new(0.5, 0.1, 1.12), CFrame.new(0.12 * heel, footY + 0.42, bz), spec.StrapColor)
+		part("ToeStrap", Vector3.new(0.22, 0.08, 1.1), CFrame.new(-0.42 * heel, footY + 0.25, bz), spec.StrapColor)
 	end
 end
 
@@ -302,7 +304,8 @@ function EquipmentService.Equip(character: Model, sportId: string)
 			buildPoles(character, model, spec.Poles)
 		end
 	else
-		buildBoard(root, model, spec, footY)
+		local player = Players:GetPlayerFromCharacter(character)
+		buildBoard(root, model, spec, footY, player and player:GetAttribute("Stance"))
 	end
 
 	model.Parent = character

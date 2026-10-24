@@ -11,6 +11,9 @@
         "SelectSport": {
           "$className": "RemoteEvent"
         },
+        "SelectStance": {
+          "$className": "RemoteEvent"
+        },
         "RequestReset": {
           "$className": "RemoteEvent"
         },

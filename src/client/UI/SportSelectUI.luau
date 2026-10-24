@@ -22,6 +22,16 @@ local SportSelectUI = {}
 local screen: ScreenGui
 local cards: { [string]: TextButton } = {}
 local pending = false
+local stanceButton: TextButton
+
+local STANCE_LABELS = {
+	Regular = "SNOWBOARD STANCE:  REGULAR  (left foot forward)",
+	Goofy = "SNOWBOARD STANCE:  GOOFY  (right foot forward)",
+}
+
+local function refreshStance()
+	stanceButton.Text = STANCE_LABELS[player:GetAttribute("Stance") or "Regular"]
+end
 
 local function corner(radius: number)
 	return Create("UICorner", { CornerRadius = UDim.new(0, radius) })
@@ -188,6 +198,25 @@ local function build()
 		cards[sportId] = card
 	end
 
+	-- Regular / goofy toggle (which foot leads on the snowboard)
+	stanceButton = Create("TextButton", {
+		Name = "Stance",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.93),
+		Size = UDim2.new(0, 380, 0.07, 0),
+		BackgroundColor3 = Color3.fromRGB(22, 30, 44),
+		Font = Enum.Font.GothamBold,
+		TextColor3 = Color3.fromRGB(200, 215, 235),
+		TextSize = 14,
+		Text = "",
+		Parent = panel,
+	}, { corner(8) })
+	stanceButton.Activated:Connect(function()
+		local next = if player:GetAttribute("Stance") == "Goofy" then "Regular" else "Goofy"
+		Remotes.SelectStance:FireServer(next)
+	end)
+	refreshStance()
+
 	screen.Parent = player:WaitForChild("PlayerGui")
 end
 
@@ -216,6 +245,7 @@ end
 function SportSelectUI.Start()
 	build()
 
+	player:GetAttributeChangedSignal("Stance"):Connect(refreshStance)
 	player:GetAttributeChangedSignal(Constants.Attributes.Sport):Connect(function()
 		pending = false
 		refreshCurrent()

@@ -63,7 +63,7 @@ local JOINTS = {
 	RightWrist = { "RightHand", "RightWrist" },
 }
 
-local EASED = { "Crouch", "Torso", "ArmForward", "Elbow", "ArmOut", "Wrist", "Turn", "Absorb" }
+local EASED = { "Crouch", "Torso", "ArmForward", "Elbow", "ArmOut", "Wrist", "Turn", "Absorb", "Brake" }
 -- Snowboard-only channels (stay at 0 for skis)
 local BOARD_EASED = { "Edge", "Press", "Spin", "AirTilt", "Lift" }
 local GRABS = { "Indy", "Melon", "Method" }
@@ -259,6 +259,10 @@ function RiderPose:Update(dt: number, input)
 		local depth = math.clamp((input.Speed or 0) / board.CarveFullSpeed, board.CarveMinDepth, 1)
 		-- Regular riders face right of travel, so a right turn is on the toe edge
 		edge = if input.Air then 0 else steer * -self.StanceSign * depth
+		-- Braking is a hard heel-side skid
+		if input.Brake and not input.Air then
+			edge = math.clamp(edge - board.BrakeEdge, -1, 1)
+		end
 		press = if input.Air then 0 else math.clamp(input.Press or 0, -1, 1)
 		local grab = if input.Air then GRABS[input.Grab or 0] else nil
 		if grab then
@@ -294,6 +298,7 @@ function RiderPose:Update(dt: number, input)
 		Wrist = lerp(style.Wrist, style.TuckWrist, tuck),
 		Turn = if input.Air then 0 else steer,
 		Absorb = absorb,
+		Brake = if input.Brake and not input.Air then 1 else 0,
 		Edge = edge,
 		Press = press,
 		Spin = if input.Air then input.Spin or 0 else 0,
@@ -345,12 +350,17 @@ function RiderPose:FootTargets(): (CFrame, CFrame)
 
 	-- Skis: hip-width apart, shifted to the outside of the turn; when the body leans, the
 	-- inside ski sits higher so both edges stay on the snow
+	local style = self.Style
 	local z = self.RestFootZ
-	local shift = -self.Current.Turn * self.Style.CarveShift
+	local shift = -self.Current.Turn * style.CarveShift
 	local slope = math.tan(self.Lean)
-	local half = equipment.Spacing / 2
+	-- Snowplow when braking: feet wider, tips turned in
+	local brake = self.Current.Brake
+	local half = equipment.Spacing / 2 + brake * style.SnowplowWiden
+	local toeIn = math.rad(style.SnowplowAngle) * brake
 	local leftX, rightX = -half + shift, half + shift
-	return CFrame.new(leftX, y - leftX * slope, z), CFrame.new(rightX, y - rightX * slope, z)
+	return CFrame.new(leftX, y - leftX * slope, z) * CFrame.Angles(0, -toeIn, 0),
+		CFrame.new(rightX, y - rightX * slope, z) * CFrame.Angles(0, toeIn, 0)
 end
 
 --[[
@@ -453,8 +463,8 @@ function RiderPose:Apply()
 	local function arm(shoulder, elbowJoint, wrist, side: number, plantAmount: number)
 		local inside = math.max(turn * side, 0)
 		local outside = math.max(-turn * side, 0)
-		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside)
-		local out = armOut + rad(style.CarveArmOut * outside)
+		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside + style.BrakeArmForward * current.Brake)
+		local out = armOut + rad(style.CarveArmOut * outside + style.BrakeArmOut * current.Brake)
 		shoulder.Transform = CFrame.Angles(0, 0, side * out) * CFrame.Angles(forward, 0, 0)
 		elbowJoint.Transform = CFrame.Angles(elbow, 0, 0)
 		wrist.Transform = CFrame.Angles(rad(current.Wrist + style.PlantWrist * plantAmount), 0, 0)
@@ -510,7 +520,9 @@ function RiderPose:ApplyBoard()
 	local roll = toeSign * rad(cfg.IndyTilt * indy - cfg.MelonTilt * melon - cfg.MethodTilt * method)
 		- rad(cfg.AirTilt) * current.AirTilt
 	local lift = cfg.AirLift * current.Lift + cfg.GrabLift * grab
-	local tweak = CFrame.new(0, lift, 0)
+	local skid = CFrame.Angles(0, toeSign * rad(cfg.SkidYaw) * current.Brake, 0)
+	local tweak = skid
+		* CFrame.new(0, lift, 0)
 		* CFrame.Angles(rad(cfg.MethodPitch) * method, 0, 0)
 		* CFrame.Angles(0, 0, roll)
 		* pressRot
@@ -556,7 +568,7 @@ function RiderPose:ApplyBoard()
 	local spinLead = math.clamp(current.Spin * cfg.SpinLead, -cfg.MaxSpinLead, cfg.MaxSpinLead)
 	local open = cfg.ShoulderOpen + toe * cfg.ToeShoulderOpen + heel * cfg.HeelShoulderOpen
 	local waistYaw = rad(open) * toeSign + rad(spinLead)
-	local torsoPitch = rad(current.Torso + toe * cfg.ToeTorso + heel * cfg.HeelTorso + grab * cfg.GrabTorso)
+	local torsoPitch = rad(math.min(current.Torso + toe * cfg.ToeTorso + heel * cfg.HeelTorso + grab * cfg.GrabTorso, cfg.MaxTorso))
 	local sway = rad(cfg.IdleSway * idle * math.sin(t * 1.3))
 	local waistT = CFrame.Angles(0, waistYaw, 0) * CFrame.Angles(-torsoPitch, 0, sway)
 	joints.Waist.Transform = waistT
@@ -585,6 +597,16 @@ function RiderPose:ApplyBoard()
 		local shoulderT = CFrame.Angles(0, 0, side * rad(out)) * CFrame.Angles(rad(forward), 0, 0)
 		local elbowT = CFrame.Angles(rad(elbow), 0, 0)
 		local wristT = CFrame.Angles(rad(current.Wrist), 0, 0)
+
+		-- Deep heel-side carve: the rear hand reaches back to the snow beside the heel edge
+		local drag = if isFront or self.Air then 0 else math.max(heel - 0.5, 0) * 2 * cfg.HeelHandDrag
+		if drag > 0.01 then
+			local snow = (boardFrame * CFrame.new(-toeSign * (spec.Width / 2 + 0.5), -spec.Thickness / 2 + 0.15, grabZ * 3)).Position
+			local shoulderPivot = upperTorso * arm.ShoulderC0
+			local dragShoulder, dragElbow = solveTwoBone(shoulderPivot, snow + (shoulderPivot.Position - snow).Unit * 0.3, arm.Upper, arm.Lower, -1)
+			shoulderT = shoulderT:Lerp(dragShoulder, drag)
+			elbowT = elbowT:Lerp(dragElbow, drag)
+		end
 
 		-- Grab: indy is the rear hand on the toe edge; melon and method the front hand on the heel edge
 		local weight = if isFront then melon + method else indy

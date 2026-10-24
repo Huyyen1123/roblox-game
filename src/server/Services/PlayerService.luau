@@ -115,6 +115,27 @@ local function onPlayerAdded(player: Player)
 	end
 end
 
+-- Snowboard stance: which foot leads. The board's highbacks sit on the heel side, so the gear
+-- is rebuilt when it changes.
+local function onSelectStance(player: Player, stance: any)
+	if stance ~= "Regular" and stance ~= "Goofy" then
+		return
+	end
+	if player:GetAttribute("Stance") == stance then
+		return
+	end
+	local now = os.clock()
+	if now - (lastSportChange[player] or 0) < SPORT_CHANGE_COOLDOWN then
+		return
+	end
+	lastSportChange[player] = now
+	player:SetAttribute("Stance", stance)
+	local sport = player:GetAttribute(Attributes.Sport)
+	if sport and player.Character then
+		EquipmentService.Equip(player.Character, sport)
+	end
+end
+
 local function onSelectSport(player: Player, sportId: any)
 	if not SportConfig.IsValid(sportId) then
 		return
@@ -218,6 +239,7 @@ function PlayerService.Init(services)
 	setupCollisionGroups()
 
 	Remotes.SelectSport.OnServerEvent:Connect(onSelectSport)
+	Remotes.SelectStance.OnServerEvent:Connect(onSelectStance)
 	Remotes.RequestReset.OnServerEvent:Connect(onRequestReset)
 	Remotes.RiderState.OnServerEvent:Connect(onRiderState)
 

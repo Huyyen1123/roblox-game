@@ -40,6 +40,11 @@ return {
 		HeadYaw = 0,
 		-- Feet shift this far (studs) to the outside of a turn: hips inside, skis outside
 		CarveShift = 0.3,
+		-- Braking: snowplow (tips in, tails out, feet wider, poles out for balance)
+		SnowplowAngle = 8, -- degrees each ski turns in (tips stay apart at this length)
+		SnowplowWiden = 0.45, -- studs each foot moves out
+		BrakeArmOut = 14,
+		BrakeArmForward = 10,
 		CounterRotation = 10, -- upper body yaws against the turn to keep facing downhill
 		CarveArmForward = 12, -- inside hand drives forward through a carve
 		CarveArmOut = 10, -- outside arm lifts slightly for balance
@@ -121,6 +126,13 @@ return {
 			MethodTilt = 38, -- heel edge up, board shown off behind
 			MethodPitch = 14, -- nose up
 			GrabResponsiveness = 11,
+			-- Braking: hard heel-side skid, board swung across the fall line
+			BrakeEdge = 0.85,
+			SkidYaw = 14,
+			-- Limits so stacked poses (e.g. toe carve + nose press) never fold the rider in half
+			MaxTorso = 30,
+			-- Deep fast heel-side carves: rear hand reaches back to the snow
+			HeelHandDrag = 0.8,
 		},
 		CarveArmForward = 0,
 		CarveArmOut = 8,
