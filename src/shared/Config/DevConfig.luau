@@ -15,8 +15,8 @@ return {
 		Origin = Vector3.new(-3000, 400, 0),
 		LaneSpacing = 120,
 		LaneWidth = 60,
-		SlopeLength = 700,
-		RunoutLength = 220,
+		SlopeLength = 1600, -- long enough to reach top speed at prototype speeds
+		RunoutLength = 500,
 		ObstacleLane = 2, -- post in the middle of the 18° lane for impact tests
 		ObstacleDistance = 300,
 	},

@@ -3,12 +3,10 @@
 	Tuning for the downhill controller. Units are studs and seconds; 1 stud = 0.28 m, so
 	studs/s × 1.008 = km/h (see Shared.Util.Units).
 
-	Speed targets (second retune after playtesting, 2026-10-23: "make it faster") and how
-	they're reached on the course's real slopes (9°–24°):
-	  Cruising  ~38–46 km/h → untucked terminal speed on 10–14° (the typical course slopes)
-	  Racing    ~55–62      → untucked terminal speed on 18–24°
-	  Tucking   ~75         → tucked terminal speed on 24°
-	  Hard cap  ~85         → MaxSpeed
+	Speeds restored to the original prototype values (2026-10-24, by request):
+	  ~80 km/h on 10–14° slopes, ~125 km/h on 24° untucked, ~160 tucked, cap 220 studs/s.
+	Gameplay improvements made since the prototype (energy-conserving carving, charged jumps,
+	stumble/wipeout, stance) are kept; only the speed-related values are the prototype's.
 	Terminal speed solves SlopeGravity·sin θ − friction = drag·v², so slope angle, SlopeGravity,
 	SnowFriction and DragCoefficient together set every number above. Change them together
 	and re-measure on the Studio test lanes (see docs/PHASE1_MOVEMENT.md).
@@ -19,28 +17,28 @@ return {
 	Debug = false,
 
 	-- Gravity along the snow (sets acceleration and terminal speeds on slopes)
-	SlopeGravity = 78,
-	-- Gravity while airborne (kept higher so jumps feel weighty, not floaty)
+	SlopeGravity = 110,
+	-- Gravity while airborne
 	AirGravity = 110,
-	MaxSpeed = 84.3, -- 85 km/h
+	MaxSpeed = 220,
 
 	-- Speed loss on the snow: drag·v² + friction·SlopeGravity·cos θ (+ turning, + braking)
-	DragCoefficient = 0.00782,
-	SnowFriction = 0.03,
+	DragCoefficient = 0.0024,
+	SnowFriction = 0.04,
 
 	Tuck = {
-		DragMultiplier = 0.684, -- 24° terminal: ~62 km/h untucked → ~75 tucked
-		TurnMultiplier = 0.5,
+		DragMultiplier = 0.6, -- 24° terminal: ~125 km/h untucked → ~160 tucked
+		TurnMultiplier = 0.55,
 		InTime = 0.35, -- seconds to fully settle into the tuck
 		OutTime = 0.2,
 	},
 
 	Brake = {
-		Deceleration = 16, -- studs/s² on top of cancelling the slope (SlopeHold)
-		SlopeHold = 1, -- 1 = braking fully counters the downhill pull of any slope
-		Grip = 3, -- lower grip lets the skis skid sideways while braking
+		Deceleration = 70, -- studs/s² (prototype value)
+		SlopeHold = 0, -- 0 = plain braking force, as in the prototype
+		Grip = 2.5, -- lower grip lets the skis skid sideways while braking
 		LateralSlip = 0.3, -- share of sideways gravity that slides the rider while braking
-		TurnMultiplier = 1.2,
+		TurnMultiplier = 1.25,
 	},
 
 	-- Carving: edges bleed off sideways slide; CarveEfficiency is the share of that sideways
@@ -48,23 +46,23 @@ return {
 	CarveGrip = 7,
 	CarveEfficiency = 0.85,
 	-- Extra speed loss from steering: TurnDrag · |steer| · speed (studs/s²)
-	TurnDrag = 0.22,
+	TurnDrag = 0,
 
 	-- Turning (radians per second), interpolated from low to high speed
-	TurnRateLowSpeed = 2.4,
+	TurnRateLowSpeed = 2.6,
 	TurnRateHighSpeed = 1.3,
-	TurnRateSpeedRef = 80,
-	SteerResponse = 9,
+	TurnRateSpeedRef = 150,
+	SteerResponse = 10,
 
 	-- Skating push (W) at low speed, e.g. off the start pad
 	Push = {
-		Acceleration = 14,
-		MaxSpeed = 12,
+		Acceleration = 30,
+		MaxSpeed = 22,
 	},
 
 	Jump = {
-		HopPower = 16, -- tap: small hop (measured ~0.6 studs)
-		FullPower = 32, -- full charge (measured ~3 studs, ~0.5 s air)
+		HopPower = 20, -- tap: small hop
+		FullPower = 38, -- full charge (the prototype's jump power)
 		ChargeTime = 0.55, -- seconds of holding for a full charge
 		UpBias = 0.35, -- 0 = along slope normal, 1 = straight up
 		Cooldown = 0.3,
@@ -89,17 +87,17 @@ return {
 
 	-- Visual lean into turns
 	LeanAngle = 18,
-	LeanSpeedRef = 60,
+	LeanSpeedRef = 80,
 
 	Landing = {
 		CleanAngle = 25, -- degrees between facing and travel direction
 		StumbleAngle = 70, -- beyond this a landing is a wipeout
-		-- Impact speeds (studs/s into the surface). A full-charge jump lands at ~30, so normal
+		-- Impact speeds (studs/s into the surface). A full-charge jump lands at ~35, so normal
 		-- jumps stay clean; drops from big airs grade into Hard, Stumble, then Wipeout.
-		SoftImpact = 36, -- above this the landing is "Hard" (small speed loss)
-		StumbleImpact = 48, -- a hard landing above this stumbles
-		WipeoutImpact = 75,
-		HardSpeedLossPerImpact = 0.006,
+		SoftImpact = 45, -- above this the landing is "Hard" (small speed loss)
+		StumbleImpact = 75, -- a hard landing above this stumbles
+		WipeoutImpact = 125,
+		HardSpeedLossPerImpact = 0.004,
 		MinSpeedForAngle = 8, -- slower than this, facing doesn't matter on landing
 	},
 
@@ -114,17 +112,17 @@ return {
 	-- Severe impact: slide to a stop, then get back up. No ragdoll or physics tumble.
 	Wipeout = {
 		Duration = 1.6,
-		Deceleration = 35,
+		Deceleration = 80, -- slide to a stop from prototype speeds within the wipeout
 		LeanAngle = 50,
 		RecoveryStumble = 0.5,
 	},
 
 	-- Impacts with obstacles: the engine produced much less velocity than commanded
 	Impact = {
-		Deviation = 10, -- commanded vs actual difference that counts as a hit
-		StumbleSpeedLoss = 6,
-		WipeoutSpeedLoss = 16,
-		WipeoutMinSpeed = 18,
+		Deviation = 25, -- commanded vs actual difference that counts as a hit
+		StumbleSpeedLoss = 15,
+		WipeoutSpeedLoss = 55,
+		WipeoutMinSpeed = 45,
 		Grace = 0.12, -- seconds after a deliberate velocity change with no impact checks
 	},
 

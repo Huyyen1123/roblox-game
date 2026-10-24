@@ -4,21 +4,23 @@ Status: implemented and tested in Studio, awaiting approval. Baseline: tag `phas
 
 ## What changed
 
-### Speed calibration (second retune: "make it faster")
+### Speed calibration (restored to the prototype speeds)
 
-Tuned twice after your playtests: first to 25/40/48/55 km/h, then to 38/52/62/70, and now
-about 20% faster again. On-snow gravity is 78, drag 0.00782, tuck drag ×0.684, cap 85 km/h.
-The speedometer conversion was always correct (1 stud = 0.28 m, so studs/s × 1.008 = km/h).
+Speeds went through three retunes (25→55, 38→70, 46→85 km/h) and are now **back to the original
+prototype's speeds** at your request (2026-10-24). On-snow and air gravity are 110, drag 0.0024,
+tuck drag ×0.6, friction 0.04, cap 220 studs/s. Turning, braking (70 studs/s², plain force),
+push and landing/impact thresholds are also back to the prototype's values. Everything else
+built since then stays: energy-conserving carving, charged jumps, stumble/wipeout, stance.
 
 | Slope | Untucked | Tucked |
 |---|---|---|
-| 10° (mellowest course slope) | ~38 km/h (calculated) | ~46 |
-| 14° (typical course slope) | ~46 (calculated) | ~56 |
-| 24° (steepest) | **61.7 km/h measured** | **74.6 km/h measured** |
-| Cap | — | 85 km/h |
+| 10°–14° | ~80 km/h (calculated) | ~100 |
+| 24° | **122 km/h measured** (prototype: ~127) | **148 and still climbing** when the lane ended (calculated ~160) |
+| Cap | — | 220 studs/s |
 
-Braking still cancels the slope's pull, so Ctrl stops you in about 2 s anywhere. Estimated
-course time is now roughly 45–55 s.
+The Studio test lanes are now 1,600 studs long so these speeds can be measured. Estimated
+course time is about 25–30 s. This is far from the 90 s target in the spec, and the spec's own
+guidance called this speed "excessively fast". Expect to revisit it in Phase 3.
 
 **About the 20 km/h you saw:** that was the real riding speed, not braking. No brake input was
 held. You were on the course's mellow 10° section (z ≈ 630–850), where the old tuning topped out
@@ -143,9 +145,9 @@ Code: `server/Dev/TestSlopes.luau`, `server/Dev/DevService.luau`, `client/Dev/De
 
 Run `rojo serve` and connect the plugin, press Play, pick a sport.
 
-1. **F7** → 10° lane. Push with W, then let go. The speedometer settles at about 32.
-2. **F7 F7** → 24° lane. Coast: it settles at about 52. Hold Shift: it eases up to about 62.
-3. On any lane at speed, hold **Ctrl**: a smooth stop in about 2 s.
+1. **F7** → 10° lane. Push with W, then let go. The speedometer climbs toward about 80.
+2. **F7 F7** → 24° lane. Coast: about 125. Hold Shift: up toward about 160.
+3. At speed, hold **Ctrl**: a strong stop (70 studs/s², as in the prototype).
 4. Do S-turns with A/D: speed drops below the straight-line speed and recovers when you
    straighten.
 5. Tap Space: small hop. Hold Space about half a second, then release: bigger jump, clean
@@ -154,8 +156,7 @@ Run `rojo serve` and connect the plugin, press Play, pick a sport.
    recovery.
 7. **F7** → 18° lane and ride into the red post: WIPEOUT, no fling.
 8. **F6** at any point to log speeds and compare with the table above.
-9. **F8** → ride the course: about 32–62 km/h depending on slope and tuck. Rough estimate
-   55–65 s to the finish.
+9. **F8** → ride the course at prototype speed. Rough estimate 25–30 s to the finish.
 
 ## Known limitations / next phases
 
