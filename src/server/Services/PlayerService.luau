@@ -180,7 +180,7 @@ local function onRiderState(player: Player, packet: any)
 	if type(tuck) ~= "number" or type(charge) ~= "number" or type(steer) ~= "number" then
 		return
 	end
-	if type(packet.Air) ~= "boolean" or type(packet.Brake) ~= "boolean" or type(packet.Stumble) ~= "boolean" then
+	if type(packet.Air) ~= "boolean" or type(packet.Brake) ~= "boolean" or type(packet.Stumble) ~= "boolean" or type(packet.Switch) ~= "boolean" then
 		return
 	end
 	local tweak, grab = packet.Tweak, packet.Grab
@@ -198,6 +198,7 @@ local function onRiderState(player: Player, packet: any)
 	character:SetAttribute("RiderAir", packet.Air)
 	character:SetAttribute("RiderBrake", packet.Brake)
 	character:SetAttribute("RiderStumble", packet.Stumble)
+	character:SetAttribute("RiderSwitch", packet.Switch)
 	-- Tweaks and grabs only exist in the air
 	local air = packet.Air
 	character:SetAttribute("RiderTweak", if air then math.clamp(math.round(tweak), -1, 1) else 0)

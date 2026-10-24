@@ -10,7 +10,7 @@
 		Angle: number,         -- degrees between facing and travel direction
 		Velocity: Vector3,     -- velocity after touchdown (into-surface part removed)
 		Heading: Vector3?,     -- new facing when the landing twisted the rider round
-		Switch: boolean,       -- landed backwards (after a 180); the rider turns to face forward
+		Switch: boolean,       -- landed backwards (after a 180): the rider now rides switch
 	}
 ]]
 
@@ -26,12 +26,18 @@ function Landing.Evaluate(velocity: Vector3, heading: Vector3, normal: Vector3, 
 
 	local angle = 0
 	local switch = false
-	if planar.Magnitude > landing.MinSpeedForAngle then
+	if planar.Magnitude > 1 then
 		angle = math.deg(math.acos(math.clamp(planar.Unit:Dot(forward), -1, 1)))
-		-- Landing backwards after a 180 (or 540…) is a switch landing: ride away facing forward
-		if 180 - angle < landing.CleanAngle then
+		-- Landing backwards after a 180 (or 540…) is a switch landing: the rider keeps facing
+		-- the way they spun and rides away switch (judged against the nearer direction). This
+		-- is decided at any speed so the stance always matches the way the body faces.
+		if angle > 90 then
 			angle = 180 - angle
 			switch = true
+		end
+		-- Too slow for the landing angle to matter for quality
+		if planar.Magnitude <= landing.MinSpeedForAngle then
+			angle = 0
 		end
 	end
 

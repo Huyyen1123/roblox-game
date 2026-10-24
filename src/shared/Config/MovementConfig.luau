@@ -96,6 +96,9 @@ return {
 	NormalSmoothing = 14,
 	MaxGroundAngle = 55,
 
+	-- Moving backwards along the gear faster than this (studs/s) flips to riding switch
+	SwitchSlideSpeed = 2,
+
 	-- Visual lean into turns (the whole body and the skis/board tilt onto their edges)
 	LeanAngle = 26,
 	LeanSpeedRef = 80,

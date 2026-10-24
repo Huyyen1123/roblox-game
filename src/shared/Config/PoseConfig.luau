@@ -37,7 +37,9 @@ return {
 		Angulation = 14, -- upper body stays more upright than the legs in a turn
 		NeckCompensation = 0.7, -- share of the torso lean the head undoes, to keep looking ahead
 		StanceYaw = 0,
-		HeadYaw = 0,
+		-- Riding switch (backwards): a bit taller and more open for balance
+		SwitchTorsoScale = 0.7,
+		SwitchArmOut = 10,
 		-- Feet shift this far (studs) to the outside of a turn: hips inside, skis outside
 		CarveShift = 0.3,
 		-- Braking: snowplow (tips in, tails out, feet wider, poles out for balance)
@@ -78,7 +80,8 @@ return {
 		Angulation = 0,
 		NeckCompensation = 0.5,
 		StanceYaw = 80, -- body turned sideways on the board (regular: left foot forward)
-		HeadYaw = 65, -- head turned back toward the direction of travel
+		SwitchTorsoScale = 1,
+		SwitchArmOut = 0,
 		CarveShift = 0, -- feet are fixed in the bindings
 		CounterRotation = 0,
 
@@ -151,6 +154,21 @@ return {
 
 	-- Easing of every joint target (higher = snappier)
 	Responsiveness = 12,
+
+	-- Head: looks along the direction of travel (over the downhill shoulder when riding
+	-- switch), leads into turns, and spots the landing in the air. The neck turns up to
+	-- NeckLimit; beyond that the shoulders help, up to ShoulderLimit.
+	Look = {
+		NeckLimit = 75,
+		ShoulderLimit = 35,
+		TurnLead = 22, -- degrees the head turns into a turn at full steer (ahead of the body)
+		Responsiveness = 7, -- easing of where the rider looks (in the world)
+		NeckResponsiveness = 10, -- easing of the neck and shoulder turn
+		MinSpeed = 3, -- below this, look where the gear points
+		-- Looking almost straight back: keep the current shoulder unless the target is
+		-- clearly on the other side (stops the head flipping between shoulders)
+		SideHysteresis = 150,
+	},
 	-- Jump: loading the knees while charging, then a quick pop (legs extend) at takeoff
 	ChargeResponsiveness = 18,
 	PopDuration = 0.18,

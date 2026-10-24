@@ -336,6 +336,8 @@ local function statusText(state): string
 		return "BRAKE"
 	elseif state.Tucking then
 		return "TUCK"
+	elseif state.Switch then
+		return "SWITCH"
 	end
 	return ""
 end
@@ -411,6 +413,9 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 		local word = if quality == "Clean" then "CLEAN" elseif quality == "Sketchy" then "SKETCHY" else "HARD"
 		local name = table.concat({ grab or "", trick or "" }, " "):match("^%s*(.-)%s*$")
 		local message = if name ~= "" then `{word} {name}` else `{word} LANDING`
+		if Movement.State.Switch then
+			message ..= "  ·  SWITCH"
+		end
 		showCallout(`{message}  ·  {string.format("%.1f", airTime)}s`, CALLOUT_COLORS[quality])
 	end)
 	Movement.Crashed:Connect(function(reason)

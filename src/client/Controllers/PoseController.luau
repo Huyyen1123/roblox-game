@@ -89,8 +89,10 @@ local function localInput()
 		Air = state.TrickAir and state.Mode == "Airborne",
 		Brake = state.Braking or state.Mode == "Wipeout",
 		Charge = state.JumpCharge,
-		Steer = state.Steer,
+		-- The pose works in the body's frame: riding switch, a right turn is to the body's left
+		Steer = if state.Switch then -state.Steer else state.Steer,
 		Stumble = state.Mode == "Stumbling" or state.Mode == "Wipeout",
+		Switch = state.Switch,
 		Tweak = state.Tweak,
 		Grab = state.Grab,
 		Speed = state.Speed,
@@ -106,6 +108,7 @@ local function remoteInput(character: Model)
 		Charge = character:GetAttribute("RiderCharge") or 0,
 		Steer = character:GetAttribute("RiderSteer") or 0,
 		Stumble = character:GetAttribute("RiderStumble") == true,
+		Switch = character:GetAttribute("RiderSwitch") == true,
 		Tweak = character:GetAttribute("RiderTweak") or 0,
 		Grab = character:GetAttribute("RiderGrab") or 0,
 	}
@@ -120,6 +123,7 @@ local function replicate(input)
 		Air = input.Air,
 		Brake = input.Brake,
 		Stumble = input.Stumble,
+		Switch = input.Switch,
 		Tweak = input.Tweak,
 		Grab = input.Grab,
 	}
@@ -135,6 +139,7 @@ local function replicate(input)
 		and lastSent.Brake == packet.Brake
 		and lastSent.Stumble == packet.Stumble
 		and lastSent.Tweak == packet.Tweak
+		and lastSent.Switch == packet.Switch
 		and lastSent.Grab == packet.Grab
 	then
 		return
@@ -174,6 +179,8 @@ local function step(dt: number)
 			input.Lean = math.asin(math.clamp(root.CFrame.RightVector.Y, -1, 1))
 			-- Spin rate drives the upper body leading a spin; speed sets how deep carves go
 			input.Spin = root.AssemblyAngularVelocity.Y
+			-- Where the rider is going, for the head to look along (and spot landings)
+			input.Travel = root.AssemblyLinearVelocity
 			input.Speed = input.Speed or root.AssemblyLinearVelocity.Magnitude
 			local verticalSpeed = root.AssemblyLinearVelocity.Y
 			local previous = lastVerticalSpeed[character]

@@ -60,7 +60,10 @@ local state = {
 	Mode = "Inactive",
 	Velocity = Vector3.zero,
 	Speed = 0,
-	Heading = Vector3.new(0, 0, -1), -- flat (horizontal) facing direction
+	Heading = Vector3.new(0, 0, -1), -- flat direction the gear travels (nose/tips first)
+	-- Riding switch: the body faces backwards relative to Heading. Physics, steering and the
+	-- camera all work in the travel direction (Heading); only the facing flips.
+	Switch = false,
 	Forward = Vector3.new(0, 0, -1), -- heading projected onto the ground plane
 	Up = WORLD_UP, -- smoothed ground normal
 	Steer = 0,
@@ -279,6 +282,10 @@ local function touchDown(normal: Vector3)
 	if result.Heading then
 		state.Heading = result.Heading
 	end
+	if result.Switch then
+		-- Landed backwards: keep facing the way the rider spun and ride away switch
+		state.Switch = not state.Switch
+	end
 	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)), state.AirGrab)
 	if result.Stumble then
 		startStumble("Landing")
@@ -343,8 +350,10 @@ local function updateOrientation(dt: number, ground)
 	end
 	up = CFrame.fromAxisAngle(forward, roll) * up
 
+	-- The body faces backwards when riding switch (the lean above is in the travel frame)
+	local facing = if state.Switch then -forward else forward
 	rig:Orient(
-		CFrame.lookAt(Vector3.zero, forward, up),
+		CFrame.lookAt(Vector3.zero, facing, up),
 		if state.Grounded then Config.Orientation.GroundResponsiveness else Config.Orientation.AirResponsiveness
 	)
 end
@@ -360,6 +369,8 @@ local function writeDebug(ground, command: Vector3)
 	root:SetAttribute("DebugTrickAir", state.TrickAir)
 	root:SetAttribute("DebugGrab", state.Grab)
 	root:SetAttribute("DebugTweak", state.Tweak)
+	root:SetAttribute("DebugSwitch", state.Switch)
+	root:SetAttribute("DebugHeading", state.Heading)
 	root:SetAttribute("DebugCommand", command)
 	for name, count in debugCounters do
 		root:SetAttribute("Debug" .. name, count)
@@ -500,6 +511,7 @@ local function resetTimers()
 	stumbleTimer = 0
 	wipeoutTimer = 0
 	state.CoastDeceleration = 0
+	state.Switch = false
 	state.TrickAir = false
 	jumpedThisAir = false
 	state.SpinRate = 0

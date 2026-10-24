@@ -153,7 +153,9 @@ end
 local function riderInput(character: Model)
 	if character == localPlayer.Character and Movement then
 		local state = Movement.State
-		return state.Active and state.Mode ~= "Frozen", state.Speed, not state.Grounded, state.Braking, state.Steer
+		-- Steer in the body's frame (the spray emitters sit on the body's left and right)
+		local steer = if state.Switch then -state.Steer else state.Steer
+		return state.Active and state.Mode ~= "Frozen", state.Speed, not state.Grounded, state.Braking, steer
 	end
 	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local speed = if root then root.AssemblyLinearVelocity.Magnitude else 0

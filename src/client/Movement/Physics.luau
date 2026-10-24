@@ -113,6 +113,13 @@ function Physics.Grounded(state, ground, intent, stats, config, rideHeight: numb
 	end
 
 	velocity = forward * forwardSpeed + right * newSideSpeed
+	-- Sliding tail-first (e.g. after a slow backwards landing, or sliding back uphill): the
+	-- gear's travel direction flips and the rider is now riding switch; the body doesn't move
+	if forwardSpeed < -config.SwitchSlideSpeed then
+		state.Heading = -state.Heading
+		state.Switch = not state.Switch
+		forward = -forward
+	end
 	if velocity.Magnitude > config.MaxSpeed then
 		velocity = velocity.Unit * config.MaxSpeed
 	end
@@ -144,10 +151,14 @@ function Physics.Airborne(state, intent, config, dt: number): Vector3
 	state.SpinRate += math.clamp(targetRate - state.SpinRate, -maxStep, maxStep)
 	local yaw = state.SpinRate * dt
 
-	-- Landing assist: with A/D released and the spin settled, turn toward the travel direction
+	-- Landing assist: with A/D released and the spin settled, line up with the travel
+	-- direction, forwards or backwards (whichever is nearer), so 180s land switch
 	local travel = Physics.Flatten(velocity)
 	if math.abs(steer) < 0.1 and math.abs(state.SpinRate) < air.AlignRate and travel then
 		local toTravel = signedYaw(state.Heading, travel)
+		if math.abs(toTravel) > math.pi / 2 then
+			toTravel = signedYaw(state.Heading, -travel)
+		end
 		yaw += math.clamp(toTravel, -air.AlignRate * dt, air.AlignRate * dt)
 	end
 

@@ -193,6 +193,13 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		LastCharge = 0,
 		Lean = 0,
 		Air = false,
+		Switch = false,
+		Root = character:FindFirstChild("HumanoidRootPart"),
+		-- Head look (see UpdateLook): world yaw being looked at, and the eased neck/shoulder turn
+		LookYaw = nil,
+		NeckYaw = 0,
+		ShoulderYaw = 0,
+		LookSide = 1,
 	}, RiderPose)
 end
 
@@ -240,6 +247,8 @@ function RiderPose:Update(dt: number, input)
 		self.LandingCrouch = math.max(self.LandingCrouch, PoseConfig.DefaultLandingCrouch)
 	end
 	self.Air = input.Air
+	self.Switch = input.Switch == true
+	self:UpdateLook(dt, input)
 	self.WasAir = input.Air
 	self.LastCharge = charge
 	local popping = self.PopTime < PoseConfig.PopDuration
@@ -284,7 +293,7 @@ function RiderPose:Update(dt: number, input)
 		crouch = style.PopCrouch
 	end
 
-	local armOut = style.ArmOut
+	local armOut = style.ArmOut + (if input.Switch then style.SwitchArmOut else 0)
 	if input.Stumble then
 		armOut += PoseConfig.StumbleWobble * (1 + math.sin(self.Clock * 14))
 	end
@@ -296,7 +305,8 @@ function RiderPose:Update(dt: number, input)
 
 	local targets = {
 		Crouch = math.min(crouch, 70),
-		Torso = lerp(style.TorsoPitch, style.TuckTorsoPitch, tuck) + style.ChargeTorso * charge,
+		Torso = lerp(style.TorsoPitch * (if input.Switch then style.SwitchTorsoScale else 1), style.TuckTorsoPitch, tuck)
+			+ style.ChargeTorso * charge,
 		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck)
 			- style.ChargeArmBack * charge
 			+ (if popping then style.PopArmForward else 0),
@@ -344,6 +354,73 @@ function RiderPose:Update(dt: number, input)
 	end
 
 	self:Apply()
+end
+
+local function wrapAngle(angle: number): number
+	return (angle + math.pi) % (2 * math.pi) - math.pi
+end
+
+-- Flat yaw of a direction (0 = -Z, positive = toward -X), matching CFrame.Angles(0, yaw, 0).
+local function yawOf(direction: Vector3): number
+	return math.atan2(-direction.X, -direction.Z)
+end
+
+--[[
+	Where the rider looks, in the world: along the direction of travel, turned into the turn
+	ahead of the body. In the air the travel direction is where the rider will land, so the
+	head spots the landing through spins. Eased in world space, so it stays steady while the
+	body rotates under it.
+]]
+function RiderPose:UpdateLook(dt: number, input)
+	local root = self.Root
+	if not root then
+		return
+	end
+	local look = PoseConfig.Look
+	local rootYaw = yawOf(root.CFrame.LookVector)
+	local travel = input.Travel or Vector3.zero
+	local flat = Vector3.new(travel.X, 0, travel.Z)
+	local target
+	if flat.Magnitude > look.MinSpeed then
+		target = yawOf(flat)
+	else
+		-- Stopped: look where the gear points (backwards from the body when riding switch)
+		target = rootYaw + (if self.Switch then math.pi else 0)
+	end
+	-- Lead into the turn: Turn is body-relative (positive = to the body's right = negative yaw)
+	if not input.Air then
+		target -= math.rad(look.TurnLead) * self.Current.Turn
+	end
+	if not self.LookYaw then
+		self.LookYaw = target
+	end
+	self.LookYaw += wrapAngle(target - self.LookYaw) * (1 - math.exp(-look.Responsiveness * dt))
+	self.LookDt = dt
+end
+
+-- Neck and extra shoulder turn (radians) to look at LookYaw from a torso facing torsoYaw
+-- (root space). Clamped to believable limits and eased, with hysteresis on the shoulder used
+-- when the target is nearly straight behind.
+function RiderPose:LookTurn(torsoYaw: number): (number, number)
+	local look = PoseConfig.Look
+	local root = self.Root
+	if not root or not self.LookYaw then
+		return 0, 0
+	end
+	local relative = wrapAngle(self.LookYaw - yawOf(root.CFrame.LookVector) - torsoYaw)
+	if math.abs(relative) > math.rad(look.SideHysteresis) and math.sign(relative) ~= self.LookSide then
+		relative = self.LookSide * math.rad(look.SideHysteresis)
+	elseif math.abs(relative) > 0.05 then
+		self.LookSide = math.sign(relative)
+	end
+	local neckLimit, shoulderLimit = math.rad(look.NeckLimit), math.rad(look.ShoulderLimit)
+	local beyond = relative - math.clamp(relative, -neckLimit, neckLimit)
+	local shoulders = math.clamp(beyond, -shoulderLimit, shoulderLimit)
+	local neck = math.clamp(relative - shoulders, -neckLimit, neckLimit)
+	local alpha = 1 - math.exp(-look.NeckResponsiveness * (self.LookDt or 1 / 60))
+	self.NeckYaw += (neck - self.NeckYaw) * alpha
+	self.ShoulderYaw += (shoulders - self.ShoulderYaw) * alpha
+	return self.NeckYaw, self.ShoulderYaw
 end
 
 -- Where each foot's centre must be (root space): on its ski's track, or in its board binding.
@@ -451,13 +528,15 @@ function RiderPose:Apply()
 	solveLeg(self.Legs.Left, lowerTorso, leftTarget)
 	solveLeg(self.Legs.Right, lowerTorso, rightTarget)
 
-	-- Upper body: forward lean, counter-rotation and angulation through turns
-	local headYaw = -rad(style.HeadYaw) * self.StanceSign
+	-- Upper body: forward lean, counter-rotation and angulation through turns; the head looks
+	-- along the direction of travel (over a shoulder when riding switch, which also twists the
+	-- shoulders toward that side)
 	local torso = rad(current.Torso)
 	local counterYaw = rad(turn * style.CounterRotation)
 	local angulation = rad(turn * style.Angulation)
-	joints.Waist.Transform = CFrame.Angles(0, counterYaw, 0) * CFrame.Angles(-torso, 0, angulation)
-	joints.Neck.Transform = CFrame.Angles(0, headYaw - counterYaw, 0) * CFrame.Angles(torso * style.NeckCompensation, 0, 0)
+	local neckYaw, shoulderYaw = self:LookTurn(counterYaw)
+	joints.Waist.Transform = CFrame.Angles(0, counterYaw + shoulderYaw, 0) * CFrame.Angles(-torso, 0, angulation)
+	joints.Neck.Transform = CFrame.Angles(0, neckYaw, 0) * CFrame.Angles(torso * style.NeckCompensation, 0, 0)
 
 	-- Arms, with the pole plant on the inside of a new turn
 	local plant = 0
@@ -574,15 +653,19 @@ function RiderPose:ApplyBoard()
 
 	-- Upper body: shoulders toward the nose (more on heel-side), the chest leads spins
 	local spinLead = math.clamp(current.Spin * cfg.SpinLead, -cfg.MaxSpinLead, cfg.MaxSpinLead)
+	-- Shoulders open toward the leading end: the nose, or the tail when riding switch
 	local open = cfg.ShoulderOpen + toe * cfg.ToeShoulderOpen + heel * cfg.HeelShoulderOpen
-	local waistYaw = rad(open) * toeSign + rad(spinLead)
+	local leadEnd = if self.Switch then -1 else 1
+	local baseYaw = rad(open) * toeSign * leadEnd + rad(spinLead)
+	-- The head looks along the travel direction (spotting the landing in spins); the
+	-- shoulders help when the neck alone can't reach
+	local neckYaw, shoulderYaw = self:LookTurn(rad(style.StanceYaw) * stance + baseYaw)
+	local waistYaw = baseYaw + shoulderYaw
 	local torsoPitch = rad(math.min(current.Torso + toe * cfg.ToeTorso + heel * cfg.HeelTorso + grab * cfg.GrabTorso, cfg.MaxTorso))
 	local sway = rad(cfg.IdleSway * idle * math.sin(t * 1.3))
 	local waistT = CFrame.Angles(0, waistYaw, 0) * CFrame.Angles(-torsoPitch, 0, sway)
 	joints.Waist.Transform = waistT
-	-- Head keeps looking along the travel direction, spotting ahead in spins
-	local headYaw = -rad(style.HeadYaw) * stance - waistYaw + rad(spinLead) * 0.5
-	joints.Neck.Transform = CFrame.Angles(0, headYaw, 0) * CFrame.Angles(torsoPitch * style.NeckCompensation, 0, 0)
+	joints.Neck.Transform = CFrame.Angles(0, neckYaw, 0) * CFrame.Angles(torsoPitch * style.NeckCompensation, 0, 0)
 
 	-- Arms: balance poses for each edge, tucked in fast spins, then grabs blend in with IK
 	local frontSide = if stance < 0 then -1 else 1 -- regular leads with the left
