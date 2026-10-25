@@ -40,7 +40,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 10,
+		TerrainVersion = 11,
 
 		-- Terrain is generated this far from the centre line / course ends.
 		Extent = { Mountain = 640, Valley = 1500, Uphill = 420, Downhill = 1400 },
@@ -69,6 +69,9 @@ return {
 
 		Noise = { Scale = 110, Amplitude = 6 },
 		Materials = { RockSlope = 1.25, MixedSlope = 0.8, SnowyEdge = 90, EdgeRockSlope = 1.7 },
+		-- Groomed racing line (its own base material, so it gets its own texture) blending into
+		-- powder at the piste edge over a ragged band, so there is no straight boundary
+		Surfaces = { Groomed = Enum.Material.Salt, BlendWidth = 12, BlendNoiseScale = 9, FineNoiseScale = 3 },
 		Lake = { Scale = 380, Threshold = 0.12 },
 
 		Boulders = { Count = 90, MinRadius = 3, MaxRadius = 10 },

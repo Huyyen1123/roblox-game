@@ -4,7 +4,8 @@
 	each write only spans the height range it needs. Occupancy is the fraction of each voxel
 	below the surface, which gives a smooth surface instead of 4-stud steps.
 
-	Materials come from slope and position: groomed Snow on the piste, Snow on gentle ground,
+	Materials come from slope and position: groomed snow (Salt, with the corduroy variant) on
+	the piste blending into powder Snow at its edges, Snow on gentle ground,
 	patchy Snow/Rock on steeper ground, Rock and Slate cliffs on the steepest faces, and a
 	frozen Glacier lake on the valley floor. Boulders are terrain balls with snow caps, so they
 	blend into the slope with no hard part edges.
@@ -18,7 +19,8 @@ local SHELL_DEPTH = 16
 local YIELD_BUDGET = 0.03 -- seconds of work between yields
 
 local MATERIAL_COLORS = {
-	[Enum.Material.Snow] = Color3.fromRGB(236, 242, 250),
+	[Enum.Material.Snow] = Color3.fromRGB(236, 242, 250), -- powder: bright and clean
+	[Enum.Material.Salt] = Color3.fromRGB(226, 234, 246), -- groomed: a touch cooler
 	[Enum.Material.Rock] = Color3.fromRGB(112, 116, 126),
 	[Enum.Material.Slate] = Color3.fromRGB(120, 124, 134),
 	[Enum.Material.Glacier] = Color3.fromRGB(168, 205, 230),
@@ -47,7 +49,17 @@ local function chooseMaterial(heightfield, x: number, z: number, height: number,
 	local world = heightfield.World
 	local materials = world.Materials
 
-	local beyond = heightfield:DistanceFromPiste(x, z)
+	-- Groomed racing line with a ragged, noisy edge (two noise scales) that blends into powder
+	local surfaces = world.Surfaces
+	local signed = math.abs(heightfield:Offset(x, z)) - world.Piste.HalfWidth
+	if signed < surfaces.BlendWidth then
+		local ragged = math.noise(x / surfaces.BlendNoiseScale, z / surfaces.BlendNoiseScale, heightfield.Seed + 200) * 0.7
+			+ math.noise(x / surfaces.FineNoiseScale, z / surfaces.FineNoiseScale, heightfield.Seed + 210) * 0.3
+		if signed + ragged * surfaces.BlendWidth < 0 then
+			return surfaces.Groomed
+		end
+	end
+	local beyond = math.max(signed, 0)
 	if beyond <= 0 then
 		return Enum.Material.Snow
 	end

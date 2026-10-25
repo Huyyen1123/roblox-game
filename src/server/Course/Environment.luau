@@ -37,6 +37,11 @@ local function applyMaterialOverrides()
 		local variant = MaterialService:FindFirstChild(entry.Variant, true)
 		if variant and variant:IsA("MaterialVariant") and variant.BaseMaterial == entry.Material then
 			variant.StudsPerTile = entry.StudsPerTile
+			-- A stand-in base material (e.g. Salt for groomed snow) keeps the physical
+			-- properties of the material it represents
+			if entry.PhysicsLike then
+				variant.CustomPhysicalProperties = PhysicalProperties.new(entry.PhysicsLike)
+			end
 			MaterialService:SetBaseMaterialOverride(entry.Material, entry.Variant)
 		else
 			warn(`[Environment] MaterialVariant {entry.Variant} not found; {entry.Material.Name} uses the stock texture`)
