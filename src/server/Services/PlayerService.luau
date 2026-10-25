@@ -187,6 +187,10 @@ local function onRiderState(player: Player, packet: any)
 	if type(tweak) ~= "number" or type(grab) ~= "number" then
 		return
 	end
+	local landSeq, landImpact, landQuality, stumbleSide = packet.LandSeq, packet.LandImpact, packet.LandQuality, packet.StumbleSide
+	if type(landSeq) ~= "number" or type(landImpact) ~= "number" or type(landQuality) ~= "number" or type(stumbleSide) ~= "number" then
+		return
+	end
 	local character = player.Character
 	if not character or not player:GetAttribute(Attributes.Sport) then
 		return
@@ -199,6 +203,11 @@ local function onRiderState(player: Player, packet: any)
 	character:SetAttribute("RiderBrake", packet.Brake)
 	character:SetAttribute("RiderStumble", packet.Stumble)
 	character:SetAttribute("RiderSwitch", packet.Switch)
+	character:SetAttribute("RiderStumbleSide", if stumbleSide >= 0 then 1 else -1)
+	-- Landing event (a counter, so every landing replays once on other clients)
+	character:SetAttribute("RiderLandImpact", math.clamp(math.round(landImpact), 0, 40))
+	character:SetAttribute("RiderLandQuality", math.clamp(math.round(landQuality), 1, 3))
+	character:SetAttribute("RiderLandSeq", math.clamp(math.round(landSeq), 0, 255))
 	-- Tweaks and grabs only exist in the air
 	local air = packet.Air
 	character:SetAttribute("RiderTweak", if air then math.clamp(math.round(tweak), -1, 1) else 0)

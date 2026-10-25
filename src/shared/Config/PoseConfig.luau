@@ -131,9 +131,6 @@ return {
 			-- On the snow, air-only channels (board lift, tilt, tweaks, grabs) return this fast,
 			-- so the board is back flat on the snow right at touchdown
 			GroundSnapResponsiveness = 40,
-			-- Landing prep: over this many seconds before touchdown the board levels out and
-			-- comes back to the feet (grabs released), so it meets the snow flat
-			LandingPrepTime = 0.22,
 			-- Braking: hard heel-side skid, board swung across the fall line
 			BrakeEdge = 0.85,
 			SkidYaw = 14,
@@ -173,19 +170,33 @@ return {
 	ChargeResponsiveness = 18,
 	PopDuration = 0.18,
 	PopResponsiveness = 30,
-	-- Extra crouch on landing, per stud/s of impact, and how fast it springs back
-	LandingCompressionPerImpact = 0.5,
-	MaxLandingCompression = 25,
-	LandingRecovery = 7,
-	-- Minimum knee compression on any snowboard touchdown (also shown for other players)
-	DefaultLandingCrouch = 12,
+	-- Takeoff to touchdown (both sports)
+	Landing = {
+		-- Knees compress per stud/s of impact, up to Max, and spring back at Recovery
+		CompressionPerImpact = 0.5,
+		MaxCompression = 25,
+		Recovery = 7,
+		-- In the last PrepTime seconds before touchdown the legs reach down to meet the snow
+		PrepTime = 0.22,
+		ReachCrouch = 14,
+		-- Hard landing: chest folds forward and the arms are thrown out, then recover slowly
+		HardFold = 16,
+		HardArmOut = 24,
+		HardRecovery = 3,
+		-- Stumble (sketchy landing or a bump): hips buckle toward one side, the torso
+		-- lurches, the arm on the far side windmills for balance; fades as balance returns
+		StumbleBuckle = 9, -- degrees the pelvis rolls
+		StumbleLurch = 14, -- degrees the torso leans
+		StumbleArm = 70, -- degrees of arm windmill
+		StumbleArmRate = 9, -- windmill speed (radians/s)
+		StumbleDecay = 2.2, -- how fast the stagger settles
+		StumbleCrouch = 10,
+	},
 	-- Knees absorb terrain: extra crouch per stud/s² of upward acceleration (dips), and the
 	-- legs extend over crests. Clamped and smoothed.
 	AbsorbPerAccel = 0.05,
 	MaxAbsorb = 12,
 	AbsorbResponsiveness = 8,
-	-- Wobble while stumbling
-	StumbleWobble = 14,
 
 	-- Riding state shared with other players so they see your stance (sends per second, max)
 	ReplicationRate = 10,

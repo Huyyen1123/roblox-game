@@ -200,11 +200,22 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		NeckYaw = 0,
 		ShoulderYaw = 0,
 		LookSide = 1,
+		-- Landing reactions: hard-landing fold (1 → 0) and the stumble stagger
+		Hard = 0,
+		StumbleTime = 0,
+		StumbleAmount = 0,
+		StumbleSide = 1,
 	}, RiderPose)
 end
 
-function RiderPose:OnLanded(impact: number)
-	self.LandingCrouch = math.min(impact * PoseConfig.LandingCompressionPerImpact, PoseConfig.MaxLandingCompression)
+-- Touchdown: knees absorb by impact; a hard landing also folds the chest and throws the arms
+-- out. (Stumbles come through the riding state, for this rider and others alike.)
+function RiderPose:OnLanded(impact: number, quality: string?)
+	local landing = PoseConfig.Landing
+	self.LandingCrouch = math.max(self.LandingCrouch, math.min(impact * landing.CompressionPerImpact, landing.MaxCompression))
+	if quality == "Hard" then
+		self.Hard = 1
+	end
 end
 
 -- Starts a pole plant on the inside of a new turn (turning right plants the right pole).
@@ -232,7 +243,20 @@ function RiderPose:Update(dt: number, input)
 	self.Clock += dt
 	self.PlantTime += dt
 	self.PopTime += dt
-	self.LandingCrouch *= math.exp(-PoseConfig.LandingRecovery * dt)
+	local landing = PoseConfig.Landing
+	self.LandingCrouch *= math.exp(-landing.Recovery * dt)
+	self.Hard *= math.exp(-landing.HardRecovery * dt)
+	-- Stumble stagger: starts strong and settles; eases away once the stumble is over
+	if input.Stumble then
+		if self.StumbleAmount < 0.05 then
+			self.StumbleTime = 0
+			self.StumbleSide = if (input.StumbleSide or 1) >= 0 then 1 else -1
+		end
+		self.StumbleTime += dt
+		self.StumbleAmount = math.exp(-landing.StumbleDecay * self.StumbleTime)
+	else
+		self.StumbleAmount *= math.exp(-6 * dt)
+	end
 	self:DetectPolePlant(steer, input.Air)
 	-- In the air the skis stay level with the body; on the snow they follow the lean
 	local leanTarget = if input.Air then 0 else math.clamp(input.Lean or 0, -MAX_LEAN, MAX_LEAN)
@@ -241,10 +265,6 @@ function RiderPose:Update(dt: number, input)
 	-- Takeoff from a charged jump: the legs pop straight and the arms throw forward
 	if input.Air and not self.WasAir and self.LastCharge > 0.05 then
 		self.PopTime = 0
-	end
-	-- Snowboard touchdown: knees absorb (other players' riders have no local Landed event)
-	if style.Board and self.WasAir and not input.Air then
-		self.LandingCrouch = math.max(self.LandingCrouch, PoseConfig.DefaultLandingCrouch)
 	end
 	self.Air = input.Air
 	self.Switch = input.Switch == true
@@ -258,15 +278,17 @@ function RiderPose:Update(dt: number, input)
 	if input.Brake then
 		crouch = math.max(crouch, style.BrakeCrouch)
 	end
+	-- Just before touchdown the legs reach down to meet the snow (and the board levels out)
+	local landingPrep = 0
 	if input.Air then
-		crouch = math.max(crouch, style.AirCrouch)
+		landingPrep = math.clamp(1 - (input.TimeToLand or math.huge) / landing.PrepTime, 0, 1)
+		crouch = math.max(crouch, lerp(style.AirCrouch, landing.ReachCrouch, landingPrep))
 	end
-	crouch += style.ChargeCrouch * charge + self.LandingCrouch
+	crouch += style.ChargeCrouch * charge + self.LandingCrouch + landing.StumbleCrouch * self.StumbleAmount
 
 	-- Snowboard: toe/heel carve depth grows with speed; tweaks and grabs in the air
 	local board = style.Board
 	local edge, tweak, grabTargets = 0, 0, { Indy = 0, Melon = 0, Method = 0 }
-	local landingPrep = 0
 	if board then
 		local depth = math.clamp((input.Speed or 0) / board.CarveFullSpeed, board.CarveMinDepth, 1)
 		-- Regular riders face right of travel, so a right turn is on the toe edge
@@ -277,10 +299,8 @@ function RiderPose:Update(dt: number, input)
 		end
 		tweak = if input.Air then math.clamp(input.Tweak or 0, -1, 1) else 0
 		-- Just before touchdown the board levels out and grabs release
-		local prep = math.clamp(1 - (input.TimeToLand or math.huge) / board.LandingPrepTime, 0, 1)
-		landingPrep = prep
-		tweak *= 1 - prep
-		local grab = if input.Air and prep < 0.5 then GRABS[input.Grab or 0] else nil
+		tweak *= 1 - landingPrep
+		local grab = if input.Air and landingPrep < 0.5 then GRABS[input.Grab or 0] else nil
 		if grab then
 			grabTargets[grab] = 1
 		end
@@ -293,10 +313,7 @@ function RiderPose:Update(dt: number, input)
 		crouch = style.PopCrouch
 	end
 
-	local armOut = style.ArmOut + (if input.Switch then style.SwitchArmOut else 0)
-	if input.Stumble then
-		armOut += PoseConfig.StumbleWobble * (1 + math.sin(self.Clock * 14))
-	end
+	local armOut = style.ArmOut + (if input.Switch then style.SwitchArmOut else 0) + landing.HardArmOut * self.Hard
 
 	local absorb = 0
 	if not input.Air then
@@ -306,7 +323,8 @@ function RiderPose:Update(dt: number, input)
 	local targets = {
 		Crouch = math.min(crouch, 70),
 		Torso = lerp(style.TorsoPitch * (if input.Switch then style.SwitchTorsoScale else 1), style.TuckTorsoPitch, tuck)
-			+ style.ChargeTorso * charge,
+			+ style.ChargeTorso * charge
+			+ landing.HardFold * self.Hard,
 		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck)
 			- style.ChargeArmBack * charge
 			+ (if popping then style.PopArmForward else 0),
@@ -423,6 +441,31 @@ function RiderPose:LookTurn(torsoYaw: number): (number, number)
 	return self.NeckYaw, self.ShoulderYaw
 end
 
+--[[
+	Stumble stagger, in the body's frame: the pelvis buckles toward StumbleSide (its knee
+	gives), the torso lurches the same way, and the arm on the far side windmills for
+	balance. Returns pelvis roll and torso roll (radians, Z rotation) and, per arm side, extra
+	forward and outward swing (degrees).
+]]
+function RiderPose:Stagger(): (number, number, { [number]: { number } })
+	local landing = PoseConfig.Landing
+	local amount = self.StumbleAmount
+	if amount < 0.01 then
+		return 0, 0, { [-1] = { 0, 0 }, [1] = { 0, 0 } }
+	end
+	local side = self.StumbleSide
+	-- Z rotation toward +X (the body's right) is negative
+	local pelvis = -side * math.rad(landing.StumbleBuckle) * amount
+	local torso = -side * math.rad(landing.StumbleLurch) * amount
+	local swing = landing.StumbleArm * amount
+	local phase = self.StumbleTime * landing.StumbleArmRate
+	local arms = {
+		[side] = { -swing * 0.2, swing * 0.15 }, -- near arm braces down and out
+		[-side] = { swing * (0.6 + 0.4 * math.sin(phase)), swing * 0.5 }, -- far arm windmills
+	}
+	return pelvis, torso, arms
+end
+
 -- Where each foot's centre must be (root space): on its ski's track, or in its board binding.
 function RiderPose:FootTargets(): (CFrame, CFrame)
 	local equipment = self.Equipment
@@ -513,15 +556,17 @@ function RiderPose:Apply()
 
 	-- Pelvis: lowered by the crouch, and always far enough for both feet to reach their gear
 	local bodyYaw = CFrame.Angles(0, rad(style.StanceYaw) * self.StanceSign, 0)
+	local stagger, lurch, staggerArms = self:Stagger()
+	local buckle = CFrame.Angles(0, 0, stagger)
 	local leftTarget, rightTarget = self:FootTargets()
-	local restLowerTorso = self.RootC0 * bodyYaw * self.RootC1:Inverse()
+	local restLowerTorso = self.RootC0 * bodyYaw * buckle * self.RootC1:Inverse()
 	local crouchDrop = self.LegLength * (1 - math.cos(rad(math.clamp(current.Crouch + current.Absorb, 0, 75))))
 	local drop = math.max(
 		crouchDrop,
 		requiredDrop(self.Legs.Left, restLowerTorso, leftTarget),
 		requiredDrop(self.Legs.Right, restLowerTorso, rightTarget)
 	)
-	local rootT = CFrame.new(0, -drop, 0) * bodyYaw
+	local rootT = CFrame.new(0, -drop, 0) * bodyYaw * buckle
 	joints.Root.Transform = rootT
 	local lowerTorso = self.RootC0 * rootT * self.RootC1:Inverse()
 
@@ -535,7 +580,8 @@ function RiderPose:Apply()
 	local counterYaw = rad(turn * style.CounterRotation)
 	local angulation = rad(turn * style.Angulation)
 	local neckYaw, shoulderYaw = self:LookTurn(counterYaw)
-	joints.Waist.Transform = CFrame.Angles(0, counterYaw + shoulderYaw, 0) * CFrame.Angles(-torso, 0, angulation)
+	-- (the torso straightens against the pelvis buckle, then lurches toward the stumble)
+	joints.Waist.Transform = CFrame.Angles(0, counterYaw + shoulderYaw, 0) * CFrame.Angles(-torso, 0, angulation - stagger + lurch)
 	joints.Neck.Transform = CFrame.Angles(0, neckYaw, 0) * CFrame.Angles(torso * style.NeckCompensation, 0, 0)
 
 	-- Arms, with the pole plant on the inside of a new turn
@@ -552,8 +598,9 @@ function RiderPose:Apply()
 	local function arm(shoulder, elbowJoint, wrist, side: number, plantAmount: number)
 		local inside = math.max(turn * side, 0)
 		local outside = math.max(-turn * side, 0)
-		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside + style.BrakeArmForward * current.Brake)
-		local out = armOut + rad(style.CarveArmOut * outside + style.BrakeArmOut * current.Brake)
+		local extra = staggerArms[side]
+		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside + style.BrakeArmForward * current.Brake + extra[1])
+		local out = armOut + rad(style.CarveArmOut * outside + style.BrakeArmOut * current.Brake + extra[2])
 		shoulder.Transform = CFrame.Angles(0, 0, side * out) * CFrame.Angles(forward, 0, 0)
 		elbowJoint.Transform = CFrame.Angles(elbow, 0, 0)
 		wrist.Transform = CFrame.Angles(rad(current.Wrist + style.PlantWrist * plantAmount), 0, 0)
@@ -637,7 +684,9 @@ function RiderPose:ApplyBoard()
 	local shift = toeDir * (toe * cfg.ToeHipShift - heel * cfg.HeelHipShift + idle * 0.04 * math.sin(t * 1.3))
 		+ Vector3.new(0, 0, -tweak * cfg.TweakHipShift)
 	local planar = CFrame.new(shift.X, 0, shift.Z)
-	local restLowerTorso = self.RootC0 * planar * bodyYaw * self.RootC1:Inverse()
+	local stagger, lurch, staggerArms = self:Stagger()
+	local buckle = CFrame.Angles(0, 0, stagger)
+	local restLowerTorso = self.RootC0 * planar * bodyYaw * buckle * self.RootC1:Inverse()
 	local knees = current.Crouch + current.Absorb + idle * cfg.IdleKnee * (math.sin(t * 1.8) + 0.5 * math.sin(t * 2.9 + 1))
 	local crouchDrop = self.LegLength * (1 - math.cos(rad(math.clamp(knees, 0, 75))))
 	local drop = math.max(
@@ -645,7 +694,7 @@ function RiderPose:ApplyBoard()
 		requiredDrop(self.Legs.Left, restLowerTorso, leftTarget),
 		requiredDrop(self.Legs.Right, restLowerTorso, rightTarget)
 	)
-	local rootT = CFrame.new(shift.X, -drop, shift.Z) * bodyYaw
+	local rootT = CFrame.new(shift.X, -drop, shift.Z) * bodyYaw * buckle
 	joints.Root.Transform = rootT
 	local lowerTorso = self.RootC0 * rootT * self.RootC1:Inverse()
 	solveLeg(self.Legs.Left, lowerTorso, leftTarget)
@@ -663,7 +712,7 @@ function RiderPose:ApplyBoard()
 	local waistYaw = baseYaw + shoulderYaw
 	local torsoPitch = rad(math.min(current.Torso + toe * cfg.ToeTorso + heel * cfg.HeelTorso + grab * cfg.GrabTorso, cfg.MaxTorso))
 	local sway = rad(cfg.IdleSway * idle * math.sin(t * 1.3))
-	local waistT = CFrame.Angles(0, waistYaw, 0) * CFrame.Angles(-torsoPitch, 0, sway)
+	local waistT = CFrame.Angles(0, waistYaw, 0) * CFrame.Angles(-torsoPitch, 0, sway - stagger + lurch)
 	joints.Waist.Transform = waistT
 	joints.Neck.Transform = CFrame.Angles(0, neckYaw, 0) * CFrame.Angles(torsoPitch * style.NeckCompensation, 0, 0)
 
@@ -675,8 +724,9 @@ function RiderPose:ApplyBoard()
 	for _, side in { -1, 1 } do
 		local arm = self.Arms[side]
 		local isFront = side == frontSide
-		local forward = current.ArmForward + idle * cfg.IdleArm * math.sin(t * 1.1 + side) + toe * cfg.ToeArmForward + spinTuck * 10
-		local out = current.ArmOut - spinTuck * cfg.SpinArmTuck + math.abs(tweak) * 12
+		local extra = staggerArms[side]
+		local forward = current.ArmForward + idle * cfg.IdleArm * math.sin(t * 1.1 + side) + toe * cfg.ToeArmForward + spinTuck * 10 + extra[1]
+		local out = current.ArmOut - spinTuck * cfg.SpinArmTuck + math.abs(tweak) * 12 + extra[2]
 		local elbow = current.Elbow + spinTuck * 15
 		if isFront then
 			out += heel * cfg.HeelFrontArmOut + indy * 25

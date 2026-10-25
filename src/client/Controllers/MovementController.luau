@@ -64,6 +64,8 @@ local state = {
 	-- Riding switch: the body faces backwards relative to Heading. Physics, steering and the
 	-- camera all work in the travel direction (Heading); only the facing flips.
 	Switch = false,
+	-- Side a stumble throws the rider toward (body frame: 1 = right, -1 = left), for the pose
+	StumbleSide = 1,
 	Forward = Vector3.new(0, 0, -1), -- heading projected onto the ground plane
 	Up = WORLD_UP, -- smoothed ground normal
 	Steer = 0,
@@ -148,10 +150,13 @@ end
 -- Stumble and wipeout
 ----------------------------------------------------------------------------------------------
 
-local function startStumble(reason: string, duration: number?)
+local function startStumble(reason: string, duration: number?, side: number?)
 	if wipeoutTimer > 0 then
 		return
 	end
+	-- Thrown toward the given side, else the way the rider was turning
+	local steerSide = if state.Steer >= 0 then 1 else -1
+	state.StumbleSide = side or if state.Switch then -steerSide else steerSide
 	duration = duration or Config.Stumble.Duration
 	if reason ~= "Recovery" then
 		state.Velocity *= 1 - Config.Stumble.SpeedLoss
@@ -270,6 +275,10 @@ local function touchDown(normal: Vector3)
 		return
 	end
 
+	-- Which way the rider is twisted off the travel direction (for a stumble's direction)
+	local planar = Physics.ProjectOnPlane(state.Velocity, normal)
+	local twist = if planar.Magnitude > 1 then state.Heading:Cross(planar).Y else 0
+
 	local result = Landing.Evaluate(state.Velocity, state.Heading, normal, stats, Config)
 	state.Velocity = result.Velocity
 	-- The landing deliberately removes velocity into the surface; don't read that as an impact.
@@ -288,7 +297,10 @@ local function touchDown(normal: Vector3)
 	end
 	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)), state.AirGrab)
 	if result.Stumble then
-		startStumble("Landing")
+		-- Momentum keeps going along the travel direction, so the body lurches toward the side
+		-- the travel is on (twist > 0: travel is left of the gear). Mirrored when switch.
+		local side = if twist > 0 then -1 else 1
+		startStumble("Landing", nil, if state.Switch then -side else side)
 	end
 end
 

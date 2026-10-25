@@ -82,6 +82,13 @@ local function setDefaultAnimations(character: Model?, enabled: boolean)
 	end
 end
 
+-- Landings are sent to other players as a counter plus impact and quality, so their copy of
+-- this rider reacts the same way (compression, hard-landing fold)
+local QUALITY_CODES = { Clean = 1, Hard = 2, Sketchy = 3 }
+local QUALITY_NAMES = { "Clean", "Hard", "Sketchy" }
+local landSeq, landImpact, landQuality = 0, 0, 0
+local seenLandSeq: { [Model]: number } = {}
+
 local function localInput()
 	local state = Movement.State
 	return {
@@ -92,6 +99,7 @@ local function localInput()
 		-- The pose works in the body's frame: riding switch, a right turn is to the body's left
 		Steer = if state.Switch then -state.Steer else state.Steer,
 		Stumble = state.Mode == "Stumbling" or state.Mode == "Wipeout",
+		StumbleSide = state.StumbleSide,
 		Switch = state.Switch,
 		Tweak = state.Tweak,
 		Grab = state.Grab,
@@ -108,6 +116,7 @@ local function remoteInput(character: Model)
 		Charge = character:GetAttribute("RiderCharge") or 0,
 		Steer = character:GetAttribute("RiderSteer") or 0,
 		Stumble = character:GetAttribute("RiderStumble") == true,
+		StumbleSide = character:GetAttribute("RiderStumbleSide") or 1,
 		Switch = character:GetAttribute("RiderSwitch") == true,
 		Tweak = character:GetAttribute("RiderTweak") or 0,
 		Grab = character:GetAttribute("RiderGrab") or 0,
@@ -126,6 +135,10 @@ local function replicate(input)
 		Switch = input.Switch,
 		Tweak = input.Tweak,
 		Grab = input.Grab,
+		StumbleSide = if (input.StumbleSide or 1) >= 0 then 1 else -1,
+		LandSeq = landSeq,
+		LandImpact = landImpact,
+		LandQuality = landQuality,
 	}
 	local now = os.clock()
 	if now - lastSendTime < 1 / PoseConfig.ReplicationRate then
@@ -141,6 +154,8 @@ local function replicate(input)
 		and lastSent.Tweak == packet.Tweak
 		and lastSent.Switch == packet.Switch
 		and lastSent.Grab == packet.Grab
+		and lastSent.StumbleSide == packet.StumbleSide
+		and lastSent.LandSeq == packet.LandSeq
 	then
 		return
 	end
@@ -191,6 +206,14 @@ local function step(dt: number)
 		local poser = ensurePoser(player, character)
 		if poser then
 			seen[character] = true
+			-- Another rider landed: play the same landing reaction
+			if player ~= localPlayer then
+				local seq = character:GetAttribute("RiderLandSeq")
+				if seq and seenLandSeq[character] and seq ~= seenLandSeq[character] then
+					poser:OnLanded((character:GetAttribute("RiderLandImpact") or 0) * 5, QUALITY_NAMES[character:GetAttribute("RiderLandQuality") or 1])
+				end
+				seenLandSeq[character] = seq or 0
+			end
 			poser:Update(dt, input)
 		end
 	end
@@ -199,6 +222,7 @@ local function step(dt: number)
 		if not seen[character] then
 			removePoser(character)
 			lastVerticalSpeed[character] = nil
+			seenLandSeq[character] = nil
 		end
 	end
 end
@@ -206,12 +230,15 @@ end
 function PoseController.Start(movementController)
 	Movement = movementController
 
-	Movement.Landed:Connect(function(_, impact)
+	Movement.Landed:Connect(function(quality, impact)
 		local character = localPlayer.Character
 		local poser = character and posers[character]
 		if poser then
-			poser:OnLanded(impact)
+			poser:OnLanded(impact, quality)
 		end
+		landSeq = (landSeq + 1) % 256
+		landImpact = math.clamp(math.round(impact / 5), 0, 40)
+		landQuality = QUALITY_CODES[quality] or 1
 	end)
 	Movement.Activated:Connect(function()
 		setDefaultAnimations(localPlayer.Character, false)
