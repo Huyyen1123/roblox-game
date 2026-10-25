@@ -11,7 +11,7 @@ The corduroy grooves, colour grading and normal maps were generated from those i
 
 | Material (MaterialService) | Base | Studs/tile | Pattern | Color | Normal | Roughness |
 |---|---|---|---|---|---|---|
-| GroomedCorduroy (racing line) | Salt | 20 | Regular | rbxassetid://137673133797870 | rbxassetid://139394263961912 | rbxassetid://129269823209917 |
+| GroomedCorduroy (racing line) | Salt | 20 | Regular | rbxassetid://102811540842140 | rbxassetid://77996430019235 | rbxassetid://78684319406153 |
 | PackedSnow (transition band) | Limestone | 18 | Organic | rbxassetid://138927776019857 | rbxassetid://101236015199762 | rbxassetid://125802414819321 |
 | PowderSoft (edges, mountain) | Snow | 22 | Organic | rbxassetid://114670635638100 | rbxassetid://103938659778066 | rbxassetid://111653654054971 |
 

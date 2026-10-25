@@ -3,35 +3,36 @@
 	Cinematic winter-afternoon lighting. Applied by the server's Environment module.
 	Lighting.Technology can't be set from scripts; it's set to Future in default.project.json.
 
-	Goals: crisp white snow without blowing out, cool blue shadows, a warm low sun,
-	and haze that gives distance without hiding the course.
+	Goals (Steep-inspired reference): late-afternoon alpine light. A lower, warm sun rakes
+	across the snow so its relief, grooves and drifts read; shadows and sky-lit snow go cool
+	blue-grey; clearer air so distant peaks stay crisp.
 ]]
 
 return {
 	Lighting = {
-		ClockTime = 14.6,
+		ClockTime = 16.1,
 		GeographicLatitude = 38,
-		Brightness = 3.2,
-		ExposureCompensation = 0,
-		Ambient = Color3.fromRGB(60, 66, 82),
-		OutdoorAmbient = Color3.fromRGB(140, 146, 162),
-		ColorShift_Top = Color3.fromRGB(255, 244, 228),
-		ColorShift_Bottom = Color3.fromRGB(170, 182, 205),
-		EnvironmentDiffuseScale = 1,
-		EnvironmentSpecularScale = 0.5,
+		Brightness = 3.4,
+		ExposureCompensation = -0.55,
+		Ambient = Color3.fromRGB(46, 54, 76),
+		OutdoorAmbient = Color3.fromRGB(112, 126, 160),
+		ColorShift_Top = Color3.fromRGB(255, 238, 214),
+		ColorShift_Bottom = Color3.fromRGB(150, 170, 205),
+		EnvironmentDiffuseScale = 0.8,
+		EnvironmentSpecularScale = 0.35,
 		GlobalShadows = true,
-		ShadowSoftness = 0.15,
+		ShadowSoftness = 0.12,
 	},
 
 	-- Haze is tuned with the skybox: thick enough to hide the seam where the painted
 	-- mountains meet the horizon, thin enough that their peaks rise clearly out of the mist.
 	Atmosphere = {
-		Density = 0.22,
-		Offset = 0.35,
+		Density = 0.14,
+		Offset = 0.3,
 		Color = Color3.fromRGB(214, 224, 240),
 		Decay = Color3.fromRGB(150, 166, 196),
-		Glare = 0.2,
-		Haze = 1.2,
+		Glare = 0.35,
+		Haze = 0.6,
 	},
 
 	-- Distant mountain panorama ("Snowy Mountain Skybox", Creator Store asset 402232085,
@@ -50,15 +51,15 @@ return {
 	},
 
 	Clouds = {
-		Cover = 0.55,
+		Cover = 0.28,
 		Density = 0.4,
 		Color = Color3.fromRGB(246, 249, 255),
 	},
 
 	ColorCorrection = {
 		Brightness = 0,
-		Contrast = 0.1,
-		Saturation = -0.02,
+		Contrast = 0.18,
+		Saturation = 0.06,
 		TintColor = Color3.fromRGB(255, 253, 250),
 	},
 

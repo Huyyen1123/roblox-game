@@ -94,14 +94,14 @@ return {
 	Drifts = {
 		StartZ = 40,
 		EndZ = 2440,
-		Spacing = 9, -- studs between drifts along each edge (jittered)
-		MinOffset = 6, -- studs beyond the fence line
-		MaxOffset = 34,
-		MinRadius = 6,
-		MaxRadius = 16,
-		MinCap = 0.7, -- visible height
-		MaxCap = 2.4,
-		RidgeChance = 0.35, -- some drifts get a smaller companion, forming a ridge
+		Spacing = 6.5, -- studs between drifts along each edge (jittered)
+		MinOffset = 4, -- studs beyond the fence line
+		MaxOffset = 40,
+		MinRadius = 7,
+		MaxRadius = 20,
+		MinCap = 0.9, -- visible height
+		MaxCap = 3.6,
+		RidgeChance = 0.45, -- some drifts get a smaller companion, forming a ridge
 	},
 
 	-- Placed so each lands on a steeper section below it.
