@@ -40,7 +40,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 11,
+		TerrainVersion = 12,
 
 		-- Terrain is generated this far from the centre line / course ends.
 		Extent = { Mountain = 640, Valley = 1500, Uphill = 420, Downhill = 1400 },
@@ -69,15 +69,39 @@ return {
 
 		Noise = { Scale = 110, Amplitude = 6 },
 		Materials = { RockSlope = 1.25, MixedSlope = 0.8, SnowyEdge = 90, EdgeRockSlope = 1.7 },
-		-- Groomed racing line (its own base material, so it gets its own texture) blending into
-		-- powder at the piste edge over a ragged band, so there is no straight boundary
-		Surfaces = { Groomed = Enum.Material.Salt, BlendWidth = 12, BlendNoiseScale = 9, FineNoiseScale = 3 },
+		-- Three snow surfaces, each its own base material so each gets its own texture:
+		-- groomed racing line → wind-packed band → powder. Both boundaries are ragged (two
+		-- noise scales), so there is no straight line anywhere.
+		Surfaces = {
+			Groomed = Enum.Material.Salt,
+			Packed = Enum.Material.Limestone,
+			BlendWidth = 12, -- how ragged the groomed edge is
+			PackedWidth = 22, -- average width of the packed band beyond the piste edge
+			BlendNoiseScale = 9,
+			FineNoiseScale = 3,
+		},
 		Lake = { Scale = 380, Threshold = 0.12 },
 
 		Boulders = { Count = 90, MinRadius = 3, MaxRadius = 10 },
 
 		Forest = { Spacing = 15, NearDistance = 150, MaxDistance = 700, MinPisteGap = 14, MaxSlope = 0.75, Density = 0.55, FarDensity = 0.3, NoiseScale = 180 },
 
+	},
+
+	-- Soft powder drifts and ridges along both edges, outside the fences. Visual only: no
+	-- collision, no queries, so riding and ground detection never see them. Each is a large
+	-- sphere sunk into the slope so only a low, soft cap shows.
+	Drifts = {
+		StartZ = 40,
+		EndZ = 2440,
+		Spacing = 9, -- studs between drifts along each edge (jittered)
+		MinOffset = 6, -- studs beyond the fence line
+		MaxOffset = 34,
+		MinRadius = 6,
+		MaxRadius = 16,
+		MinCap = 0.7, -- visible height
+		MaxCap = 2.4,
+		RidgeChance = 0.35, -- some drifts get a smaller companion, forming a ridge
 	},
 
 	-- Placed so each lands on a steeper section below it.

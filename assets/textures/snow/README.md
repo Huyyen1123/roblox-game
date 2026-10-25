@@ -3,15 +3,20 @@
 Source photo sets are CC0 (no attribution required) from ambientCG:
 - Snow005: fine grain, used under the groomed corduroy
 - Snow004: soft wind-blown undulations, used for powder
-- Snow007A: small clumps, mixed lightly into the powder relief
+- Snow007A: small clumps, mixed into the powder relief
+- Snow010A: crusty detail, mixed into the packed band and powder
 
 The corduroy grooves, colour grading and normal maps were generated from those in code
 (1024 px, seamlessly tiling, OpenGL normals).
 
-| Material (MaterialService) | Base | Studs/tile | Color | Normal | Roughness |
-|---|---|---|---|---|---|
-| GroomedCorduroy | Salt | 8 | rbxassetid://86121615919949 | rbxassetid://114741866047851 | rbxassetid://121505661909314 |
-| PowderSoft | Snow | 20 | rbxassetid://73187914255542 | rbxassetid://80097658085105 | rbxassetid://96314852685986 |
+| Material (MaterialService) | Base | Studs/tile | Pattern | Color | Normal | Roughness |
+|---|---|---|---|---|---|---|
+| GroomedCorduroy (racing line) | Salt | 20 | Regular | rbxassetid://137673133797870 | rbxassetid://139394263961912 | rbxassetid://129269823209917 |
+| PackedSnow (transition band) | Limestone | 18 | Organic | rbxassetid://138927776019857 | rbxassetid://101236015199762 | rbxassetid://125802414819321 |
+| PowderSoft (edges, mountain) | Snow | 22 | Organic | rbxassetid://114670635638100 | rbxassetid://103938659778066 | rbxassetid://111653654054971 |
+
+Revision 2 (Steep-inspired): smooth packed racing line with faint corduroy (about 15% strength),
+a wind-packed band, thick irregular powder, deeper blue-grey hollows. Snow010A (crust) is also mixed in.
 
 The MaterialVariants live in the place file (MaterialService); EnvironmentConfig sets them as the
 base-material overrides at runtime. To change a texture: edit the PNG, upload it (Studio:

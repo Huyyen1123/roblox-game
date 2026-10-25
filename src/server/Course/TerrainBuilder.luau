@@ -20,7 +20,8 @@ local YIELD_BUDGET = 0.03 -- seconds of work between yields
 
 local MATERIAL_COLORS = {
 	[Enum.Material.Snow] = Color3.fromRGB(236, 242, 250), -- powder: bright and clean
-	[Enum.Material.Salt] = Color3.fromRGB(226, 234, 246), -- groomed: a touch cooler
+	[Enum.Material.Salt] = Color3.fromRGB(234, 240, 249), -- groomed: smooth, bright
+	[Enum.Material.Limestone] = Color3.fromRGB(232, 239, 249), -- wind-packed band
 	[Enum.Material.Rock] = Color3.fromRGB(112, 116, 126),
 	[Enum.Material.Slate] = Color3.fromRGB(120, 124, 134),
 	[Enum.Material.Glacier] = Color3.fromRGB(168, 205, 230),
@@ -52,11 +53,17 @@ local function chooseMaterial(heightfield, x: number, z: number, height: number,
 	-- Groomed racing line with a ragged, noisy edge (two noise scales) that blends into powder
 	local surfaces = world.Surfaces
 	local signed = math.abs(heightfield:Offset(x, z)) - world.Piste.HalfWidth
-	if signed < surfaces.BlendWidth then
+	if signed < surfaces.BlendWidth + surfaces.PackedWidth * 1.6 then
 		local ragged = math.noise(x / surfaces.BlendNoiseScale, z / surfaces.BlendNoiseScale, heightfield.Seed + 200) * 0.7
 			+ math.noise(x / surfaces.FineNoiseScale, z / surfaces.FineNoiseScale, heightfield.Seed + 210) * 0.3
 		if signed + ragged * surfaces.BlendWidth < 0 then
 			return surfaces.Groomed
+		end
+		-- Wind-packed band between the groomed line and the powder, with its own ragged edge
+		local band = surfaces.PackedWidth * (1 + 0.6 * math.noise(x / 31, z / 31, heightfield.Seed + 220))
+			+ math.noise(x / surfaces.FineNoiseScale, z / surfaces.FineNoiseScale, heightfield.Seed + 230) * 4
+		if signed < band and slope < materials.EdgeRockSlope then
+			return surfaces.Packed
 		end
 	end
 	local beyond = math.max(signed, 0)

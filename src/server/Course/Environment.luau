@@ -42,6 +42,9 @@ local function applyMaterialOverrides()
 			if entry.PhysicsLike then
 				variant.CustomPhysicalProperties = PhysicalProperties.new(entry.PhysicsLike)
 			end
+			if entry.Pattern then
+				variant.MaterialPattern = entry.Pattern
+			end
 			MaterialService:SetBaseMaterialOverride(entry.Material, entry.Variant)
 		else
 			warn(`[Environment] MaterialVariant {entry.Variant} not found; {entry.Material.Name} uses the stock texture`)

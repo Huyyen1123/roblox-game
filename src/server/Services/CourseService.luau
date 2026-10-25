@@ -23,6 +23,7 @@ local TerrainBuilder = require(Course.TerrainBuilder)
 local PropBuilder = require(Course.PropBuilder)
 local ForestBuilder = require(Course.ForestBuilder)
 local DressingBuilder = require(Course.DressingBuilder)
+local SnowDriftBuilder = require(Course.SnowDriftBuilder)
 local Environment = require(Course.Environment)
 
 local SPAWN_HEIGHT = 5
@@ -78,6 +79,7 @@ function CourseService.Init()
 	PropBuilder.Build(heightfield, folder)
 	local trees = ForestBuilder.Build(heightfield, folder)
 	DressingBuilder.Build(heightfield, folder)
+	SnowDriftBuilder.Build(heightfield, folder)
 
 	folder:SetAttribute(Constants.Attributes.CourseReady, true)
 	readyEvent:Fire()

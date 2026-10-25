@@ -80,8 +80,17 @@ return {
 		-- Powder (course edges and the mountain) and groomed corduroy (the racing line). Built
 		-- from CC0 ambientCG photo sets (Snow004, Snow005) with procedural grooves; see
 		-- docs/SNOW_SYSTEM_PLAN.md. AlpineSnowWhite1 stays in the place as the previous look.
-		{ Material = Enum.Material.Snow, Variant = "PowderSoft", StudsPerTile = 20 },
-		{ Material = Enum.Material.Salt, Variant = "GroomedCorduroy", StudsPerTile = 8, PhysicsLike = Enum.Material.Snow },
+		-- Organic pattern randomly rotates and offsets the tiles to hide repetition (not used on
+		-- the groomed line, where the faint corduroy must stay aligned with the fall line).
+		{ Material = Enum.Material.Snow, Variant = "PowderSoft", StudsPerTile = 22, Pattern = Enum.MaterialPattern.Organic },
+		{ Material = Enum.Material.Salt, Variant = "GroomedCorduroy", StudsPerTile = 20, PhysicsLike = Enum.Material.Snow },
+		{
+			Material = Enum.Material.Limestone,
+			Variant = "PackedSnow",
+			StudsPerTile = 18,
+			Pattern = Enum.MaterialPattern.Organic,
+			PhysicsLike = Enum.Material.Snow,
+		},
 		{ Material = Enum.Material.Rock, Variant = "AlpineGraniteCliff", StudsPerTile = 32 },
 		{ Material = Enum.Material.Slate, Variant = "AlpineDarkSlate", StudsPerTile = 32 },
 	},
