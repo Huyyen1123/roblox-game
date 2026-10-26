@@ -98,9 +98,11 @@ local function buildRig(character: Model, equipment: Model)
 	local trails = {}
 	-- The channel each ski / the board cuts into the snow
 	local grooves = {}
+	local gears = {}
 	for _, gear in equipment:GetChildren() do
 		if gear:IsA("BasePart") and (gear.Name == "Ski" or gear.Name == "Board") then
 			table.insert(grooves, SnowGroove.new(gear))
+			table.insert(gears, gear)
 		end
 	end
 
@@ -149,7 +151,7 @@ local function buildRig(character: Model, equipment: Model)
 		Instances = instances,
 		Trails = trails,
 		Grooves = grooves,
-		Board = equipment:FindFirstChild("Board"),
+		Gears = gears, -- the Ski parts or the Board
 		Wake = nil, -- PowderWake, created when this rider gets a full-detail slot
 		Dirty = false,
 		RideHeight = -snowY + 0.04,
@@ -180,7 +182,7 @@ local function isSwitch(character: Model): boolean
 	return character:GetAttribute("RiderSwitch") == true
 end
 
--- Full-detail powder wake (prototype, snowboards): the local rider plus the nearest few
+-- Full-detail powder wake (prototype, skis and boards): the local rider plus the nearest few
 -- riders within range; local rider only at low graphics quality. Timing is measured.
 local wakeSlots = {} -- [character] = true
 local wakeStats = { Frames = 0, Total = 0, Samples = {} }
@@ -209,7 +211,7 @@ local function chooseWakeSlots(cameraPosition: Vector3)
 	end
 	local candidates = {}
 	for character, rig in rigs do
-		if character ~= local_ and rig.Board then
+		if character ~= local_ and #rig.Gears > 0 then
 			local distance = (rig.Root.Position - cameraPosition).Magnitude
 			if distance < settings.MaxDistance then
 				table.insert(candidates, { character, distance })
@@ -225,9 +227,9 @@ local function chooseWakeSlots(cameraPosition: Vector3)
 end
 
 local function updateWake(rig, character: Model, dt: number, contact: boolean, steer: number, speed: number, braking: boolean)
-	local wanted = rig.Board ~= nil and wakeSlots[character] == true and not rig.WakeFailed
+	local wanted = #rig.Gears > 0 and wakeSlots[character] == true and not rig.WakeFailed
 	if wanted and not rig.Wake then
-		local ok, wake = pcall(PowderWake.new, rig.Board)
+		local ok, wake = pcall(PowderWake.new, rig.Gears)
 		rig.Wake = if ok then wake else nil
 		-- Don't retry every frame (e.g. the client's mesh memory budget is used up)
 		rig.WakeFailed = not ok

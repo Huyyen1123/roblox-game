@@ -69,56 +69,78 @@ return {
 		Enabled = true,
 		Bound = 140, -- mesh bounds (studs); vertices stay within this of the origin
 		Recenter = 45, -- re-centre the mesh when the rider is this far from its origin
-		Color = Color3.fromRGB(236, 242, 250),
 		CastShadow = true,
 		StudsPerTile = 22, -- texture scale; matches the PowderSoft snow variant
-		-- Cross-section of the channel, left → right of travel. X in units of (half the board
-		-- width + Extra); Wall = share of the berm height; Offset = studs added. The floor and
-		-- outer edges dive well under the terrain (the rendered terrain can sit a little below
-		-- its collision surface), so the terrain itself is the floor and the berms stand up
-		-- from it; the inner wall face is steep, the outer one a long slope.
-		Extra = 1.4,
-		WallHeight = 0.24,
-		Profile = {
-			{ X = -1, Wall = 0, Offset = -0.3 },
-			{ X = -0.85, Wall = 0.2, Offset = -0.04 },
-			{ X = -0.68, Wall = 0.7, Offset = 0 },
-			{ X = -0.5, Wall = 1, Offset = 0 },
-			{ X = -0.38, Wall = 0.5, Offset = -0.05 },
-			{ X = -0.33, Wall = 0, Offset = -0.35 },
-			{ X = 0.33, Wall = 0, Offset = -0.35 },
-			{ X = 0.38, Wall = 0.5, Offset = -0.05 },
-			{ X = 0.5, Wall = 1, Offset = 0 },
-			{ X = 0.68, Wall = 0.7, Offset = 0 },
-			{ X = 0.85, Wall = 0.2, Offset = -0.04 },
-			{ X = 1, Wall = 0, Offset = -0.3 },
+		ShadeColor = Color3.fromRGB(198, 212, 234), -- compressed, shadowed snow (inner walls)
+		-- Vertex colours and vertex alpha only render on a (very slightly) transparent part
+		Transparency = 0.02,
+		-- One channel per piece of gear, by part name. Profile: one side of the cross-section,
+		-- from under the gear outward. D = studs beyond the gear's edge (negative = under it);
+		-- Wall = share of the snow height; Offset = studs added; Shade = share of ShadeColor;
+		-- Alpha = opacity (the outer shoulder fades into the terrain).
+		-- The floor and outer edge dive under the terrain (the terrain is the floor; the
+		-- rendered terrain can sit a little below its collision surface). Crest = D beyond
+		-- which the shoulder may widen or narrow. BuildUp = height of the powder beside the
+		-- moving gear; TrackHeight = height of the rims of the track left behind.
+		Kinds = {
+			Board = {
+				BuildUp = 0.2,
+				TrackHeight = 0.07,
+				Crest = 0.3,
+				Sections = 64,
+				Spacing = 1,
+				Profile = {
+					{ D = -0.3, Wall = 0, Offset = -0.35, Shade = 0.8 },
+					{ D = -0.02, Wall = 0.55, Offset = -0.03, Shade = 0.6 },
+					{ D = 0.12, Wall = 0.9, Offset = 0, Shade = 0.25 },
+					{ D = 0.3, Wall = 1, Offset = 0 },
+					{ D = 0.65, Wall = 0.55, Offset = 0, Alpha = 0.85 },
+					{ D = 1.05, Wall = 0.18, Offset = -0.02, Alpha = 0.35 },
+					{ D = 1.5, Wall = 0, Offset = -0.25, Alpha = 0 },
+				},
+			},
+			Ski = {
+				BuildUp = 0.14,
+				TrackHeight = 0.05,
+				Crest = 0.15,
+				Sections = 48,
+				Spacing = 1,
+				Profile = {
+					{ D = -0.2, Wall = 0, Offset = -0.3, Shade = 0.8 },
+					{ D = -0.02, Wall = 0.55, Offset = -0.03, Shade = 0.6 },
+					{ D = 0.06, Wall = 0.9, Offset = 0, Shade = 0.25 },
+					{ D = 0.15, Wall = 1, Offset = 0 },
+					{ D = 0.32, Wall = 0.55, Offset = 0, Alpha = 0.85 },
+					{ D = 0.5, Wall = 0.18, Offset = -0.02, Alpha = 0.35 },
+					{ D = 0.72, Wall = 0, Offset = -0.2, Alpha = 0 },
+				},
+			},
 		},
-		-- Rows beside the board, from the leading nose (T = 0) toward the tail (the live row
-		-- at the tail, T = 1, follows); Height = share of the berm height
+		-- Rows beside the gear, from the leading nose (T = 0) toward the tail (the live row
+		-- at the tail, T = 1, follows). Height = share of BuildUp; Settle = how far it has
+		-- settled toward the track's rim height
 		Stations = {
-			{ T = 0, Height = 0 },
-			{ T = 0.15, Height = 0.3 },
-			{ T = 0.32, Height = 0.6 },
-			{ T = 0.5, Height = 0.85 },
-			{ T = 0.68, Height = 1 },
-			{ T = 0.85, Height = 1 },
+			{ T = 0, Height = 0, Settle = 0 },
+			{ T = 0.15, Height = 0.45, Settle = 0 },
+			{ T = 0.32, Height = 0.8, Settle = 0 },
+			{ T = 0.5, Height = 1, Settle = 0 },
+			{ T = 0.68, Height = 1, Settle = 0.15 },
+			{ T = 0.85, Height = 0.9, Settle = 0.55 },
 		},
-		-- Groove behind the board: a cross-section every Spacing studs, up to Sections of them
-		-- (the oldest is reused); the last TaperRows shrink to nothing; each frame 1 in
-		-- AgeStride rows is re-aged
-		Sections = 64,
-		Spacing = 1,
-		TaperRows = 8,
-		AgeStride = 6,
-		Wobble = 0.9, -- uneven berms: height varies by about ± this share / 2 along the groove
-		Spread = 0.8, -- and their outer slope widens / narrows by about ± this share / 2
+		StandingShare = 0.45, -- powder beside the gear when standing still (share of BuildUp)
+		BuildUpSpeed = 35, -- full build-up from this speed
+		TaperRows = 8, -- the last rows of a track shrink to nothing
+		AgeStride = 6, -- each frame 1 in this many laid rows is re-aged
+		Wobble = 0.5, -- uneven rims: height varies by about ± this share / 2 along the track
+		Spread = 0.6, -- and the shoulders widen / narrow by about ± this share / 2
 		WobbleScale = 0.2, -- per stud travelled
-		Lifetime = 8, -- walls slump to nothing over this many seconds
-		Sink = 0.15, -- and sink this far
+		Lifetime = 8, -- rims slump to nothing over this many seconds
+		Sink = 0.06, -- and sink this far
 		CarveFullSpeed = 60,
-		CarveRaise = 0.8, -- engaged edge: berm up to this much higher
+		CarveRaise = 0.9, -- engaged edge: snow up to this much higher
+		CarvePush = 0.6, -- and its shoulder pushed this much further out
 		CarveLower = 0.5, -- other edge: this much lower
-		BrakeRaise = 0.1, -- studs added at the front while braking
+		BrakeRaise = 0.08, -- studs added at the front while braking
 		SinkInRate = 8,
 		LiftOutRate = 25,
 		SwellPerImpact = 0.012,
