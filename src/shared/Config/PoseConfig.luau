@@ -56,6 +56,22 @@ return {
 		PlantForward = 32, -- inside arm swings forward to plant the pole
 		PlantWrist = 40, -- pole tip swings forward to touch the snow
 		PlantDuration = 0.4,
+
+		-- Grabs (Q/E/F/G in the air): the knees pull the skis up toward the body and one hand
+		-- reaches to a ski (arm IK). Hand: -1 left, 1 right; Ski: which ski; Z: studs along the
+		-- ski from its centre (negative = toward the tip), or "Tail"; Pitch: degrees the skis
+		-- tip down (negative) or up; Cross: studs the skis cross behind (japan).
+		Grabs = {
+			Lift = 0.85, -- studs the feet come up
+			Back = 0.15, -- studs the feet move back under the hips
+			Crouch = 28,
+			Torso = 16,
+			Responsiveness = 11,
+			{ Name = "Safety", Hand = 1, Ski = 1, Z = 0.1, Pitch = -6, Cross = 0 },
+			{ Name = "Mute", Hand = -1, Ski = 1, Z = -1.1, Pitch = -14, Cross = 0 },
+			{ Name = "Japan", Hand = -1, Ski = 1, Z = -0.8, Pitch = -38, Cross = 0.3 },
+			{ Name = "Tail", Hand = 1, Ski = 1, Z = "Tail", Pitch = -30, Cross = 0 },
+		},
 	},
 
 	Snowboard = {
@@ -127,6 +143,7 @@ return {
 			MelonTilt = 14, -- heel edge up
 			MethodTilt = 38, -- heel edge up, board shown off behind
 			MethodPitch = 14, -- nose up
+			TailGrabPitch = 18, -- tail grab: the tail comes up to the rear hand
 			GrabResponsiveness = 11,
 			-- On the snow, air-only channels (board lift, tilt, tweaks, grabs) return this fast,
 			-- so the board is back flat on the snow right at touchdown
@@ -151,6 +168,13 @@ return {
 
 	-- Easing of every joint target (higher = snappier)
 	Responsiveness = 12,
+
+	-- Flips (both sports): the rider tucks tight while rotating, by how fast they rotate
+	Flip = {
+		Crouch = 34,
+		Torso = 16,
+		ArmIn = 18, -- degrees the arms pull in
+	},
 
 	-- Head: looks along the direction of travel (over the downhill shoulder when riding
 	-- switch), leads into turns, and spots the landing in the air. The neck turns up to

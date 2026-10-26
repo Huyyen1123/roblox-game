@@ -48,7 +48,9 @@ local MovementController = {}
 MovementController.Activated = Signal.new()
 MovementController.Deactivated = Signal.new()
 MovementController.ModeChanged = Signal.new() -- (newMode, oldMode)
-MovementController.Landed = Signal.new() -- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime, spinDegrees, grabName?)
+-- (quality: "Clean" | "Hard" | "Sketchy", impactSpeed, airTime, spinDegrees, grabName?, flipDegrees)
+-- flipDegrees is signed: positive = forward (frontflips), negative = backward
+MovementController.Landed = Signal.new()
 MovementController.Stumbled = Signal.new() -- (reason: "Landing" | "Bump" | "Recovery")
 MovementController.Crashed = Signal.new() -- wipeout (reason: "Collision" | "BadLanding")
 MovementController.Jumped = Signal.new() -- (charge: number 0..1)
@@ -77,15 +79,19 @@ local state = {
 	AirTime = 0,
 	SpinRate = 0, -- radians/s of airborne yaw (A/D in the air)
 	AirSpin = 0, -- radians spun since leaving the ground (signed)
+	-- Flips (W/S in the air): body pitch about the axis across the travel direction
+	Flip = 0, -- radians, positive = forward (head toward the travel direction)
+	FlipRate = 0, -- radians/s
+	AirFlip = 0, -- radians flipped since leaving the ground (signed)
 	-- Really in the air (for animation and tricks): a jump, or off the snow for longer than
 	-- Air.TrickDelay. Physics uses Grounded; this filters out brief contact losses on bumps.
 	TrickAir = false,
 	-- Seconds until touchdown while falling toward visible ground (math.huge otherwise);
 	-- the pose levels the board just before landing
 	TimeToLand = math.huge,
-	-- Board style inputs, in the air only (pose only; no effect on speed)
-	Tweak = 0, -- 1 nose tweak (W), -1 tail tweak (S), 0 none
-	Grab = 0, -- 0 none, 1 indy, 2 melon, 3 method
+	-- Style inputs, in the air only (pose only; no effect on speed)
+	Tweak = 0, -- board: 1 nose tweak (Z), -1 tail tweak (X), 0 none
+	Grab = 0, -- 0 none, 1..4 (Q/E/F/G; names per sport in SportConfig.Grabs)
 	AirGrab = nil :: string?, -- grab held long enough to count in this jump
 	SlopeAngle = 0,
 	CoastDeceleration = 0,
@@ -192,7 +198,7 @@ end
 -- Step
 ----------------------------------------------------------------------------------------------
 
-local GRAB_NAMES = { "INDY", "MELON", "METHOD" }
+local grabNames = SportConfig.Sports.Snowboard.Grabs
 local jumpedThisAir = false
 local GRAB_COUNT_TIME = 0.25
 local grabHeldTime = 0
@@ -209,12 +215,19 @@ local function readIntent(dt: number)
 	state.Tucking = state.Tuck > 0.5
 	state.Braking = canAct and Input.IsHeld("Brake")
 
-	-- Board tweaks in the air (W nose, S tail); on the snow W only pushes
-	local tweak = 0
+	-- In the air: flips (W front, S back; on the snow W only pushes), board tweaks (Z nose,
+	-- X tail) and grabs
+	local flip, tweak = 0, 0
 	if canAct and state.TrickAir then
+		if Input.IsHeld("Push") then
+			flip += 1
+		end
+		if Input.IsHeld("Back") then
+			flip -= 1
+		end
 		if Input.IsHeld("TailTweak") then
 			tweak = -1
-		elseif Input.IsHeld("Push") then
+		elseif Input.IsHeld("NoseTweak") then
 			tweak = 1
 		end
 	end
@@ -222,18 +235,16 @@ local function readIntent(dt: number)
 	-- Grabs in the air; one held for GrabCountTime counts toward the landing callout
 	local grab = 0
 	if canAct and state.TrickAir then
-		if Input.IsHeld("GrabMethod") then
-			grab = 3
-		elseif Input.IsHeld("GrabMelon") then
-			grab = 2
-		elseif Input.IsHeld("GrabIndy") then
-			grab = 1
+		for i = 4, 1, -1 do
+			if Input.IsHeld("Grab" .. i) then
+				grab = i
+			end
 		end
 	end
 	if grab ~= 0 and grab == state.Grab then
 		grabHeldTime += dt
 		if grabHeldTime >= GRAB_COUNT_TIME then
-			state.AirGrab = GRAB_NAMES[grab]
+			state.AirGrab = grabNames[grab]
 		end
 	else
 		grabHeldTime = 0
@@ -245,6 +256,7 @@ local function readIntent(dt: number)
 		Tuck = state.Tuck,
 		Brake = state.Braking,
 		Push = canAct and Input.IsHeld("Push"),
+		Flip = flip,
 		Coast = not canAct,
 	}
 end
@@ -279,7 +291,11 @@ local function touchDown(normal: Vector3)
 	local planar = Physics.ProjectOnPlane(state.Velocity, normal)
 	local twist = if planar.Magnitude > 1 then state.Heading:Cross(planar).Y else 0
 
-	local result = Landing.Evaluate(state.Velocity, state.Heading, normal, stats, Config)
+	-- How far a flip has left the body rotated (under- or over-rotated, or upside down):
+	-- the angle between where the body really is and where it would be without the flip.
+	-- Landing on a steep slope after a plain jump isn't penalised.
+	local tilt = math.deg(math.acos(math.clamp(root.CFrame.UpVector:Dot(state.Up), -1, 1)))
+	local result = Landing.Evaluate(state.Velocity, state.Heading, normal, stats, Config, tilt)
 	state.Velocity = result.Velocity
 	-- The landing deliberately removes velocity into the surface; don't read that as an impact.
 	impactGrace = math.max(impactGrace, Config.Impact.Grace)
@@ -295,7 +311,7 @@ local function touchDown(normal: Vector3)
 		-- Landed backwards: keep facing the way the rider spun and ride away switch
 		state.Switch = not state.Switch
 	end
-	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)), state.AirGrab)
+	MovementController.Landed:Fire(result.Quality, result.Impact, state.AirTime, math.deg(math.abs(state.AirSpin)), state.AirGrab, math.deg(state.AirFlip))
 	if result.Stumble then
 		-- Momentum keeps going along the travel direction, so the body lurches toward the side
 		-- the travel is on (twist > 0: travel is left of the gear). Mirrored when switch.
@@ -364,8 +380,13 @@ local function updateOrientation(dt: number, ground)
 
 	-- The body faces backwards when riding switch (the lean above is in the travel frame)
 	local facing = if state.Switch then -forward else forward
+	local rotation = CFrame.lookAt(Vector3.zero, facing, up)
+	if state.Flip ~= 0 then
+		-- Flip about the axis across the travel direction (positive: head toward travel)
+		rotation = CFrame.fromAxisAngle(forward:Cross(state.Up).Unit, -state.Flip) * rotation
+	end
 	rig:Orient(
-		CFrame.lookAt(Vector3.zero, facing, up),
+		rotation,
 		if state.Grounded then Config.Orientation.GroundResponsiveness else Config.Orientation.AirResponsiveness
 	)
 end
@@ -462,6 +483,9 @@ local function step(dt: number)
 		state.AirTime = 0
 		state.SpinRate = 0
 		state.AirSpin = 0
+		state.Flip = 0
+		state.FlipRate = 0
+		state.AirFlip = 0
 		state.AirGrab = nil
 		state.TrickAir = false
 		jumpedThisAir = false
@@ -528,6 +552,9 @@ local function resetTimers()
 	jumpedThisAir = false
 	state.SpinRate = 0
 	state.AirSpin = 0
+	state.Flip = 0
+	state.FlipRate = 0
+	state.AirFlip = 0
 	state.JumpCharge = 0
 	state.Tuck = 0
 	skipLandingCheck = true
@@ -544,6 +571,7 @@ function MovementController.Activate()
 
 	character, root = player.Character, r
 	stats = SportConfig.GetStats(player:GetAttribute(Constants.Attributes.Sport))
+	grabNames = (SportConfig.Sports[player:GetAttribute(Constants.Attributes.Sport)] or SportConfig.Sports.Snowboard).Grabs
 	rideHeight = CharacterUtil.GetFootOffset(character) + Config.EquipmentThickness
 	raycastParams = buildRaycastParams()
 	rig = Rig.new(humanoid, root, Config)
@@ -600,6 +628,7 @@ local function refresh()
 	if hasSport and alive then
 		if state.Active then
 			stats = SportConfig.GetStats(player:GetAttribute(Constants.Attributes.Sport))
+			grabNames = (SportConfig.Sports[player:GetAttribute(Constants.Attributes.Sport)] or SportConfig.Sports.Snowboard).Grabs
 		else
 			MovementController.Activate()
 		end

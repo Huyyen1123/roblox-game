@@ -7,9 +7,10 @@
 	  Steer     – axis from keys, the left stick, or touch.
 	  Held      – true while any bound input is down (Tuck, Brake, Push).
 	  Actions   – discrete presses/releases (Jump, ToggleCamera, Reset, Zoom).
-	Snowboard tricks (in the air only): Q/E/F grab (indy, melon, method), W/S tweak the
-	nose/tail up, A/D spin. On the snow W pushes and S does nothing.
-	Reserved for Phase 4: W/S flip in the air.
+	Tricks (in the air only, both sports): A/D spin, W frontflip, S backflip (held: the
+	rotation keeps going; nothing finishes it for you), Q/E/F/G grab (board: indy, melon,
+	method, tail; skis: safety, mute, japan, tail), Z/X tweak the board's nose/tail up.
+	On the snow W pushes and S does nothing.
 ]]
 
 return {
@@ -27,20 +28,32 @@ return {
 			Keys = { Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl, Enum.KeyCode.ButtonL2 },
 			TouchButton = { Title = "Brake", Position = UDim2.new(1, -245, 1, -60) },
 		},
+		-- Push on the snow, frontflip in the air
 		Push = {
 			Keys = { Enum.KeyCode.W, Enum.KeyCode.Up },
 		},
-		TailTweak = {
+		-- Backflip in the air
+		Back = {
 			Keys = { Enum.KeyCode.S, Enum.KeyCode.Down },
 		},
-		GrabIndy = {
+		NoseTweak = {
+			Keys = { Enum.KeyCode.Z },
+		},
+		TailTweak = {
+			Keys = { Enum.KeyCode.X },
+		},
+		-- Grabs, named per sport in SportConfig (Tricks.Grabs)
+		Grab1 = {
 			Keys = { Enum.KeyCode.Q, Enum.KeyCode.ButtonX },
 		},
-		GrabMelon = {
+		Grab2 = {
 			Keys = { Enum.KeyCode.E, Enum.KeyCode.ButtonB },
 		},
-		GrabMethod = {
+		Grab3 = {
 			Keys = { Enum.KeyCode.F, Enum.KeyCode.ButtonR1 },
+		},
+		Grab4 = {
+			Keys = { Enum.KeyCode.G, Enum.KeyCode.ButtonL1 },
 		},
 	},
 

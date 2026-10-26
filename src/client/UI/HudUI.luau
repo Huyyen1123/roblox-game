@@ -3,10 +3,10 @@
 	Minimal riding HUD:
 	  - Compact speedometer, bottom-right: large km/h number, thin speed line, jump-charge line,
 	    and a small status word only when it matters (tuck, brake, get ready).
-	  - Control hints, bottom-left, as small chips; each fades out once the player has used it.
+	  - Control display, bottom-left, as small chips (always shown while riding).
 	  - Camera mode, shown briefly only when it changes.
 	  - A small "Change Sport" button, top-right.
-	  - Short centre callouts for landings (with spin: 180/360/…), crashes and resets.
+	  - Short centre callouts for landings (tricks: flips, spins, grabs), crashes and resets.
 ]]
 
 local Players = game:GetService("Players")
@@ -33,8 +33,6 @@ local TEXT = Color3.fromRGB(245, 248, 255)
 local SUBTLE = Color3.fromRGB(180, 195, 215)
 local ACCENT = Color3.fromRGB(110, 205, 255)
 local CAMERA_LABEL_TIME = 1.6
--- Every hint fades after this long riding, even if unused
-local HINT_TIMEOUT = 90
 
 local HudUI = {}
 
@@ -49,8 +47,6 @@ local statusLabel: TextLabel
 local cameraLabel: TextLabel
 local callout: TextLabel
 local displayedSpeed = 0
-local hints = {} -- [action] = chip
-local ridingTime = 0
 
 local function corner(radius: number)
 	return Create("UICorner", { CornerRadius = UDim.new(0, radius) })
@@ -86,29 +82,31 @@ end
 local function hintList()
 	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
 		return {
-			{ "Steer", "Stick", "Steer" },
+			{ "Steer", "Stick", "Steer · spin (air)" },
+			{ "Flip", "Stick ↕", "Flip (air)" },
 			{ "Tuck", "Tuck", "Speed" },
 			{ "Brake", "Brake", "Slow" },
 			{ "Jump", "Jump", "Hold to charge" },
 		}
 	elseif UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled then
 		return {
-			{ "Steer", "L-Stick", "Steer / spin" },
+			{ "Steer", "L-Stick", "Steer · spin (air)" },
+			{ "Flip", "L-Stick ↕", "Front / backflip (air)" },
 			{ "Tuck", "RT", "Tuck" },
 			{ "Brake", "LT", "Brake" },
 			{ "Jump", "A", "Hold to charge jump" },
-			{ "Grab", "X/B/RB", "Grab (board, in the air)" },
+			{ "Grab", "X/B/RB/LB", "Grabs (air)" },
 			{ "Camera", "Y", "Camera" },
 			{ "Reset", "Back", "Restart at summit" },
 		}
 	end
 	return {
-		{ "Steer", "A / D", "Steer · spin in the air" },
+		{ "Steer", "A / D", "Steer · spin (air)" },
+		{ "Flip", "W / S", "Front / backflip (air)" },
+		{ "Grab", "Q E F G", "Grabs (air)" },
 		{ "Tuck", "Shift", "Tuck" },
 		{ "Brake", "Ctrl", "Brake" },
 		{ "Jump", "Space", "Hold to charge jump" },
-		{ "Grab", "Q / E / F", "Grab: indy, melon, method" },
-		{ "Tweak", "W / S", "Nose / tail tweak (in the air)" },
 		{ "Camera", "V", "Camera" },
 		{ "Reset", "R", "Restart at summit" },
 	}
@@ -119,7 +117,7 @@ local function buildHints()
 		Name = "Hints",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 18, 1, -18),
-		Size = UDim2.fromOffset(260, 200),
+		Size = UDim2.fromOffset(260, 240),
 		BackgroundTransparency = 1,
 		Parent = screen,
 	}, {
@@ -158,25 +156,7 @@ local function buildHints()
 			Size = UDim2.new(1, -64, 1, 0),
 			Parent = chip,
 		})
-		hints[hint[1]] = chip
 	end
-end
-
--- The player has used this control: fade its hint away.
-local function learned(action: string)
-	local chip = hints[action]
-	if not chip then
-		return
-	end
-	hints[action] = nil
-	for _, child in chip:GetChildren() do
-		if child:IsA("GuiObject") then
-			fadeOut(child, 0.8, 0.6)
-		end
-	end
-	task.delay(1.6, function()
-		chip:Destroy()
-	end)
 end
 
 local function build()
@@ -368,6 +348,17 @@ local function spinName(degrees: number): string?
 	return tostring(halves * 180)
 end
 
+-- Whole flips (signed degrees: positive = forward). A landed flip is within the landing's
+-- tolerance of a whole turn, so rounding to the nearest turn names it.
+local FLIP_COUNTS = { "", "DOUBLE ", "TRIPLE " }
+local function flipName(degrees: number): string?
+	local turns = math.floor(math.abs(degrees) / 360 + 0.5)
+	if turns < 1 then
+		return nil
+	end
+	return (FLIP_COUNTS[turns] or `{turns}x `) .. (if degrees > 0 then "FRONTFLIP" else "BACKFLIP")
+end
+
 local function update(dt: number)
 	local state = Movement.State
 	displayedSpeed += (state.Speed - displayedSpeed) * (1 - math.exp(-12 * dt))
@@ -375,29 +366,6 @@ local function update(dt: number)
 	barFill.Size = UDim2.fromScale(math.clamp(displayedSpeed / Config.MaxSpeed, 0, 1), 1)
 	chargeFill.Size = UDim2.new(state.JumpCharge, 0, 0, 2)
 	statusLabel.Text = statusText(state)
-
-	-- Hints fade once each control has been used
-	if math.abs(state.Steer) > 0.5 then
-		learned("Steer")
-	end
-	if state.Tucking then
-		learned("Tuck")
-	end
-	if state.Braking then
-		learned("Brake")
-	end
-	if state.Grab ~= 0 then
-		learned("Grab")
-	end
-	if state.Tweak ~= 0 then
-		learned("Tweak")
-	end
-	ridingTime += dt
-	if ridingTime > HINT_TIMEOUT then
-		for action in hints do
-			learned(action)
-		end
-	end
 end
 
 function HudUI.Start(movementController, cameraController, sportSelectUI)
@@ -408,7 +376,6 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 
 	Camera.ModeChanged:Connect(function()
 		showCameraMode()
-		learned("Camera")
 	end)
 
 	Movement.Activated:Connect(function()
@@ -419,16 +386,21 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 	end)
 	screen.Enabled = Movement.IsActive()
 
-	Movement.Jumped:Connect(function()
-		learned("Jump")
-	end)
-	Movement.Landed:Connect(function(quality, _impact, airTime, spin, grab)
+	Movement.Landed:Connect(function(quality, _impact, airTime, spin, grab, flip)
 		local trick = spinName(spin or 0)
-		if airTime < 0.4 and not trick and not grab then
+		local flipped = flipName(flip or 0)
+		if airTime < 0.4 and not trick and not grab and not flipped then
 			return
 		end
 		local word = if quality == "Clean" then "CLEAN" elseif quality == "Sketchy" then "SKETCHY" else "HARD"
-		local name = table.concat({ grab or "", trick or "" }, " "):match("^%s*(.-)%s*$")
+		-- e.g. "BACKFLIP 360 MUTE"
+		local parts = {}
+		for _, part in { flipped, trick, grab } do
+			if part then
+				table.insert(parts, part)
+			end
+		end
+		local name = table.concat(parts, " ")
 		local message = if name ~= "" then `{word} {name}` else `{word} LANDING`
 		if Movement.State.Switch then
 			message ..= "  ·  SWITCH"
@@ -444,7 +416,6 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 		end
 	end)
 	Movement.Reset:Connect(function()
-		learned("Reset")
 		showCallout("RESET TO START", CALLOUT_COLORS.Info)
 	end)
 

@@ -227,7 +227,7 @@ function InputController.IsHeld(name: string): boolean
 		if c and UserInputService.TouchEnabled and c:GetMoveVector().Z < -InputConfig.StickPushThreshold then
 			return true
 		end
-	elseif name == "TailTweak" then
+	elseif name == "Back" then
 		if gamepadMove.Y < -InputConfig.StickPushThreshold then
 			return true
 		end

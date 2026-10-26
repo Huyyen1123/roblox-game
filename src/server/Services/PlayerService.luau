@@ -221,7 +221,10 @@ local function onRiderState(player: Player, packet: any)
 	-- Tweaks and grabs only exist in the air
 	local air = packet.Air
 	character:SetAttribute("RiderTweak", if air then math.clamp(math.round(tweak), -1, 1) else 0)
-	character:SetAttribute("RiderGrab", if air then math.clamp(math.round(grab), 0, 3) else 0)
+	character:SetAttribute("RiderGrab", if air then math.clamp(math.round(grab), 0, 4) else 0)
+	-- Flip rate, -4..4 (the rotation itself replicates with the character)
+	local flip = if type(packet.Flip) == "number" and air then math.clamp(math.round(packet.Flip), -4, 4) else 0
+	character:SetAttribute("RiderFlip", flip / 4)
 end
 
 local function onRequestReset(player: Player)

@@ -77,9 +77,18 @@ return {
 	Air = {
 		SpinRate = 9.5, -- radians/s at full A/D (~545°/s: a 360 in about 0.7 s)
 		SpinAcceleration = 50, -- how fast a spin builds and slows (smooth, not instant)
-		-- With A/D released, the rider rotates toward the travel direction, finishing a
-		-- nearly-complete spin or unwinding a small one, so landings line up naturally.
+		-- With A/D released and the spin settled, a rider already within AlignWindow degrees
+		-- of the travel direction (forwards or backwards) is eased onto it. Further off, nothing
+		-- finishes the rotation: under- and over-rotated spins land that way.
 		AlignRate = 5.5,
+		AlignWindow = 30,
+		-- Flips (W front, S back): the rotation builds while held and keeps its angle when
+		-- released; within FlipAssistWindow degrees of upright the body eases level.
+		FlipRate = 7.2, -- radians/s at full rotation (~410°/s: a flip in ~0.9 s)
+		FlipAcceleration = 26,
+		FlipStopAcceleration = 18, -- how fast the rotation slows once the key is released
+		FlipAssistWindow = 25,
+		FlipAssistRate = 2.5,
 		-- Leaving the snow without jumping (crests, bumps) only counts as being in the air for
 		-- animation and tricks after this long, so small bumps never trigger air poses or grabs.
 		-- A jump counts immediately.
@@ -104,6 +113,10 @@ return {
 	LeanSpeedRef = 80,
 
 	Landing = {
+		-- Body rotation left over from a flip at touchdown: up to Clean lands smoothly, up to
+		-- Sketchy lands with a stumble, beyond (under/over-rotated, upside down) wipes out
+		TiltClean = 30,
+		TiltSketchy = 55,
 		CleanAngle = 25, -- degrees between facing and travel direction
 		StumbleAngle = 70, -- beyond this a landing is a wipeout
 		-- Impact speeds (studs/s into the surface). A full-charge jump lands at ~35, so normal

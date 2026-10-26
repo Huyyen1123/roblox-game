@@ -19,6 +19,8 @@ local Sports = {
 		Tagline = "Two edges. Precise carving.",
 		Description = "Classic downhill on twin skis. Quick edge changes and a forward-facing stance.",
 		AccentColor = Color3.fromRGB(230, 70, 70),
+		-- Grab names for Grab1..Grab4 (Q/E/F/G)
+		Grabs = { "SAFETY", "MUTE", "JAPAN", "TAIL GRAB" },
 		Equipment = {
 			Kind = "Skis",
 			-- Proportioned to a ~5.6-stud blocky R15 avatar (see the style guide): about as wide
@@ -52,6 +54,7 @@ local Sports = {
 		Tagline = "One board. Big style.",
 		Description = "A single board with a sideways stance. Smooth, flowing turns and a freestyle feel.",
 		AccentColor = Color3.fromRGB(60, 140, 235),
+		Grabs = { "INDY", "MELON", "METHOD", "TAIL GRAB" },
 		Equipment = {
 			Kind = "Board",
 			-- Proportioned to a ~5.6-stud R15 avatar: a bit wider than the feet are long, thin,

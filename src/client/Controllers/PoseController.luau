@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local PoseConfig = require(ReplicatedStorage.Shared.Config.PoseConfig)
 
 local RiderPose = require(script.Parent.Parent.Animation.RiderPose)
@@ -122,6 +123,7 @@ local function localInput()
 		Switch = state.Switch,
 		Tweak = state.Tweak,
 		Grab = state.Grab,
+		Flip = state.FlipRate / MovementConfig.Air.FlipRate,
 		Speed = state.Speed,
 		TimeToLand = state.TimeToLand,
 	}
@@ -139,6 +141,7 @@ local function remoteInput(character: Model)
 		Switch = character:GetAttribute("RiderSwitch") == true,
 		Tweak = character:GetAttribute("RiderTweak") or 0,
 		Grab = character:GetAttribute("RiderGrab") or 0,
+		Flip = character:GetAttribute("RiderFlip") or 0,
 	}
 end
 
@@ -154,6 +157,7 @@ local function replicate(input)
 		Switch = input.Switch,
 		Tweak = input.Tweak,
 		Grab = input.Grab,
+		Flip = math.round(math.clamp(input.Flip or 0, -1, 1) * 4),
 		StumbleSide = if (input.StumbleSide or 1) >= 0 then 1 else -1,
 		LandSeq = landSeq,
 		LandImpact = landImpact,
@@ -173,6 +177,7 @@ local function replicate(input)
 		and lastSent.Tweak == packet.Tweak
 		and lastSent.Switch == packet.Switch
 		and lastSent.Grab == packet.Grab
+		and lastSent.Flip == packet.Flip
 		and lastSent.StumbleSide == packet.StumbleSide
 		and lastSent.LandSeq == packet.LandSeq
 	then

@@ -151,16 +151,34 @@ function Physics.Airborne(state, intent, config, dt: number): Vector3
 	state.SpinRate += math.clamp(targetRate - state.SpinRate, -maxStep, maxStep)
 	local yaw = state.SpinRate * dt
 
-	-- Landing assist: with A/D released and the spin settled, line up with the travel
-	-- direction, forwards or backwards (whichever is nearer), so 180s land switch
+	-- Landing assist: with A/D released and the spin settled, a rider already close to the
+	-- travel direction (forwards or backwards, so 180s land switch) is eased onto it. Further
+	-- off, the rotation is left as it is: nothing completes a spin for the rider.
 	local travel = Physics.Flatten(velocity)
 	if math.abs(steer) < 0.1 and math.abs(state.SpinRate) < air.AlignRate and travel then
 		local toTravel = signedYaw(state.Heading, travel)
 		if math.abs(toTravel) > math.pi / 2 then
 			toTravel = signedYaw(state.Heading, -travel)
 		end
-		yaw += math.clamp(toTravel, -air.AlignRate * dt, air.AlignRate * dt)
+		if math.abs(toTravel) < math.rad(air.AlignWindow) then
+			yaw += math.clamp(toTravel, -air.AlignRate * dt, air.AlignRate * dt)
+		end
 	end
+
+	-- Flips: W/S drive a pitch rate that builds while held and slows once released; the
+	-- angle stays where it is (only a nearly level body eases upright)
+	local flipInput = if intent.Coast then 0 else (intent.Flip or 0)
+	local flipTarget = flipInput * air.FlipRate
+	local flipAccel = if flipInput ~= 0 then air.FlipAcceleration else air.FlipStopAcceleration
+	local flipStep = flipAccel * dt
+	state.FlipRate += math.clamp(flipTarget - state.FlipRate, -flipStep, flipStep)
+	local pitch = state.FlipRate * dt
+	local wrapped = (state.Flip + math.pi) % (2 * math.pi) - math.pi
+	if flipInput == 0 and math.abs(state.FlipRate) < 0.5 and math.abs(wrapped) < math.rad(air.FlipAssistWindow) then
+		pitch += math.clamp(-wrapped, -air.FlipAssistRate * dt, air.FlipAssistRate * dt)
+	end
+	state.Flip += pitch
+	state.AirFlip += pitch
 
 	state.Heading = (CFrame.Angles(0, yaw, 0) * state.Heading).Unit
 	state.AirSpin += yaw

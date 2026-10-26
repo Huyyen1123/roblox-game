@@ -12,13 +12,16 @@
 		Heading: Vector3?,     -- new facing when the landing twisted the rider round
 		Switch: boolean,       -- landed backwards (after a 180): the rider now rides switch
 	}
+
+	tilt: degrees a flip has left the body rotated at touchdown (0 = no flip). Rotations
+	are never finished for the rider: badly under- or over-rotated landings fail.
 ]]
 
 local Physics = require(script.Parent.Physics)
 
 local Landing = {}
 
-function Landing.Evaluate(velocity: Vector3, heading: Vector3, normal: Vector3, stats, config)
+function Landing.Evaluate(velocity: Vector3, heading: Vector3, normal: Vector3, stats, config, tilt: number?)
 	local landing = config.Landing
 	local impact = -velocity:Dot(normal)
 	local planar = Physics.ProjectOnPlane(velocity, normal)
@@ -52,7 +55,9 @@ function Landing.Evaluate(velocity: Vector3, heading: Vector3, normal: Vector3, 
 		Switch = switch,
 	}
 
-	if impact > landing.WipeoutImpact * stability or angle > landing.StumbleAngle then
+	tilt = tilt or 0
+	result.Tilt = tilt
+	if impact > landing.WipeoutImpact * stability or angle > landing.StumbleAngle or tilt > landing.TiltSketchy then
 		result.Quality = "Wipeout"
 		return result
 	end
@@ -68,6 +73,10 @@ function Landing.Evaluate(velocity: Vector3, heading: Vector3, normal: Vector3, 
 		result.Quality = "Sketchy"
 		result.Stumble = true
 		result.Heading = Physics.Flatten(planar)
+	end
+	if tilt > landing.TiltClean then
+		result.Quality = "Sketchy"
+		result.Stumble = true
 	end
 
 	result.Velocity = planar * (1 - math.clamp(speedLoss, 0, 0.6))

@@ -30,12 +30,19 @@
 		Stumble: boolean,
 		VerticalAccel: number, -- studs/s², for knees absorbing terrain
 		Lean: number,          -- radians the rider is rolled (positive = right side up)
+		Grab: number,          -- 0 none, 1..4 (in the air)
+		Flip: number,          -- -1..1, how fast the rider is flipping (tucks the body)
 	}
+
+	Grabs: each sport has four (board: indy, melon, method, tail; skis: safety, mute, japan,
+	tail). The hand is solved onto the gear with arm IK; for skis the knees pull the skis up
+	to the hand (the skis are welded to the feet, so moving the feet moves the skis).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local PoseConfig = require(ReplicatedStorage.Shared.Config.PoseConfig)
 local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
@@ -68,7 +75,11 @@ local EASED = { "Crouch", "Torso", "ArmForward", "Elbow", "ArmOut", "Wrist", "Tu
 local BOARD_EASED = { "Edge", "Tweak", "Spin", "AirTilt", "Lift" }
 -- Channels that only exist in the air: snapped back on the snow so the board never floats
 local AIR_ONLY = { Tweak = true, AirTilt = true, Lift = true }
-local GRABS = { "Indy", "Melon", "Method" }
+-- Grab channels per sport, in Grab1..Grab4 order
+local BOARD_GRABS = { "Indy", "Melon", "Method", "Tail" }
+local SKI_GRABS = { "Safety", "Mute", "Japan", "Tail" }
+-- How fast grabs let go just before touchdown and on the snow
+local GRAB_RELEASE_RESPONSIVENESS = 40
 
 -- Legs never straighten past this share of their length (keeps the knee solution stable)
 local MAX_REACH = 0.995
@@ -153,7 +164,9 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 	for _, key in BOARD_EASED do
 		current[key] = 0
 	end
-	for _, key in GRABS do
+	local equipmentSpec = sport.Equipment
+	local grabChannels = if equipmentSpec.Kind == "Board" then BOARD_GRABS else SKI_GRABS
+	for _, key in grabChannels do
 		current[key] = 0
 	end
 	local rootC0, rootC1 = jointFrames(joints.Root)
@@ -171,6 +184,15 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		WaistC1 = waistC1,
 		Character = character,
 		IsBoard = equipment.Kind == "Board",
+		GrabChannels = grabChannels,
+		-- Ski centre relative to its foot's centre (the ski is welded to the foot)
+		SkiOffset = if equipment.Kind == "Board"
+			then CFrame.identity
+			else CFrame.new(
+				0,
+				-footPart.Size.Y / 2 - MovementConfig.EquipmentThickness + equipment.Thickness / 2,
+				-equipment.MountOffset
+			),
 		BoardFlat = if equipment.Kind == "Board"
 			then equipment.Length - 2 * equipment.KickLength * math.cos(math.rad(equipment.KickAngle))
 			else 0,
@@ -291,9 +313,22 @@ function RiderPose:Update(dt: number, input)
 	end
 	crouch += style.ChargeCrouch * charge + self.LandingCrouch + landing.StumbleCrouch * self.StumbleAmount
 
-	-- Snowboard: toe/heel carve depth grows with speed; tweaks and grabs in the air
+	-- Grabs (both sports): held in the air, released just before touchdown
+	local grabTargets = {}
+	for _, key in self.GrabChannels do
+		grabTargets[key] = 0
+	end
+	local grab = if input.Air and landingPrep < 0.5 then self.GrabChannels[input.Grab or 0] else nil
+	if grab then
+		grabTargets[grab] = 1
+	end
+	-- Flips: tuck tight while rotating
+	local flip = if input.Air then math.min(math.abs(input.Flip or 0), 1) else 0
+	crouch += PoseConfig.Flip.Crouch * flip
+
+	-- Snowboard: toe/heel carve depth grows with speed; tweaks in the air
 	local board = style.Board
-	local edge, tweak, grabTargets = 0, 0, { Indy = 0, Melon = 0, Method = 0 }
+	local edge, tweak = 0, 0
 	if board then
 		local depth = math.clamp((input.Speed or 0) / board.CarveFullSpeed, board.CarveMinDepth, 1)
 		-- Regular riders face right of travel, so a right turn is on the toe edge
@@ -303,22 +338,21 @@ function RiderPose:Update(dt: number, input)
 			edge = math.clamp(edge - board.BrakeEdge, -1, 1)
 		end
 		tweak = if input.Air then math.clamp(input.Tweak or 0, -1, 1) else 0
-		-- Just before touchdown the board levels out and grabs release
+		-- Just before touchdown the board levels out
 		tweak *= 1 - landingPrep
-		local grab = if input.Air and landingPrep < 0.5 then GRABS[input.Grab or 0] else nil
-		if grab then
-			grabTargets[grab] = 1
-		end
 		crouch += math.max(edge, 0) * board.ToeCrouch + math.max(-edge, 0) * board.HeelCrouch + math.abs(tweak) * board.TweakCrouch
 		if grab then
 			crouch += board.GrabCrouch
 		end
+	elseif grab then
+		crouch += style.Grabs.Crouch
 	end
 	if popping then
 		crouch = style.PopCrouch
 	end
 
 	local armOut = style.ArmOut + (if input.Switch then style.SwitchArmOut else 0) + landing.HardArmOut * self.Hard
+		- PoseConfig.Flip.ArmIn * flip
 
 	local absorb = 0
 	if not input.Air then
@@ -329,7 +363,9 @@ function RiderPose:Update(dt: number, input)
 		Crouch = math.min(crouch, 70),
 		Torso = lerp(style.TorsoPitch * (if input.Switch then style.SwitchTorsoScale else 1), style.TuckTorsoPitch, tuck)
 			+ style.ChargeTorso * charge
-			+ landing.HardFold * self.Hard,
+			+ landing.HardFold * self.Hard
+			+ PoseConfig.Flip.Torso * flip
+			+ (if grab and not board then style.Grabs.Torso else 0),
 		ArmForward = lerp(style.ArmForward, style.TuckArmForward, tuck)
 			- style.ChargeArmBack * charge
 			+ (if popping then style.PopArmForward else 0),
@@ -344,10 +380,10 @@ function RiderPose:Update(dt: number, input)
 		Spin = if input.Air then input.Spin or 0 else 0,
 		AirTilt = if input.Air then steer * (1 - landingPrep) else 0,
 		Lift = if input.Air then 1 - landingPrep else 0,
-		Indy = grabTargets.Indy,
-		Melon = grabTargets.Melon,
-		Method = grabTargets.Method,
 	}
+	for key, value in grabTargets do
+		targets[key] = value
+	end
 
 	-- Ease toward targets so states blend instead of snapping
 	local responsiveness = PoseConfig.Responsiveness
@@ -369,11 +405,13 @@ function RiderPose:Update(dt: number, input)
 			local rate = if AIR_ONLY[key] and (not input.Air or landingPrep > 0) then snapAlpha else alpha
 			current[key] += (targets[key] - current[key]) * rate
 		end
-		local grabRate = if input.Air and landingPrep <= 0 then board.GrabResponsiveness else board.GroundSnapResponsiveness
-		local grabAlpha = 1 - math.exp(-grabRate * dt)
-		for _, key in GRABS do
-			current[key] += (targets[key] - current[key]) * grabAlpha
-		end
+	end
+	local grabRate = if input.Air and landingPrep <= 0
+		then (if board then board.GrabResponsiveness else style.Grabs.Responsiveness)
+		else GRAB_RELEASE_RESPONSIVENESS
+	local grabAlpha = 1 - math.exp(-grabRate * dt)
+	for _, key in self.GrabChannels do
+		current[key] += (targets[key] - current[key]) * grabAlpha
 	end
 
 	self:Apply()
@@ -576,6 +614,28 @@ function RiderPose:Apply()
 	local stagger, lurch, staggerArms = self:Stagger()
 	local buckle = CFrame.Angles(0, 0, stagger)
 	local leftTarget, rightTarget = self:FootTargets()
+
+	-- Grabs: the knees pull the skis up toward the body and tip them (the skis are welded to
+	-- the feet, so they follow); the strongest grab decides which hand reaches which ski
+	local grabs = style.Grabs
+	local grabTotal, grabIndex, grabWeight = 0, nil, 0
+	local grabPitch, grabCross = 0, 0
+	for i, key in self.GrabChannels do
+		local weight = current[key]
+		grabTotal += weight
+		grabPitch += rad(grabs[i].Pitch) * weight
+		grabCross += grabs[i].Cross * weight
+		if weight > grabWeight then
+			grabIndex, grabWeight = i, weight
+		end
+	end
+	grabTotal = math.min(grabTotal, 1)
+	if grabTotal > 0.01 then
+		local lift = CFrame.new(0, grabs.Lift * grabTotal, grabs.Back * grabTotal)
+		local tip = CFrame.Angles(grabPitch, 0, 0)
+		leftTarget = lift * CFrame.new(grabCross, 0, 0) * leftTarget * tip
+		rightTarget = lift * CFrame.new(-grabCross, 0, 0) * rightTarget * tip
+	end
 	local restLowerTorso = self.RootC0 * bodyYaw * buckle * self.RootC1:Inverse()
 	local crouchDrop = self.LegLength * (1 - math.cos(rad(math.clamp(current.Crouch + current.Absorb, 0, 75))))
 	local drop = math.max(
@@ -598,8 +658,21 @@ function RiderPose:Apply()
 	local angulation = rad(turn * style.Angulation)
 	local neckYaw, shoulderYaw = self:LookTurn(counterYaw)
 	-- (the torso straightens against the pelvis buckle, then lurches toward the stumble)
-	joints.Waist.Transform = CFrame.Angles(0, counterYaw + shoulderYaw, 0) * CFrame.Angles(-torso, 0, angulation - stagger + lurch)
+	local waistT = CFrame.Angles(0, counterYaw + shoulderYaw, 0) * CFrame.Angles(-torso, 0, angulation - stagger + lurch)
+	joints.Waist.Transform = waistT
 	joints.Neck.Transform = CFrame.Angles(0, neckYaw, 0) * CFrame.Angles(torso * style.NeckCompensation, 0, 0)
+
+	-- Grab: where the grabbing hand goes (root space), on the ski's top edge
+	local grabHand, grabPoint = nil, nil
+	if grabIndex and grabWeight > 0.01 then
+		local spec = grabs[grabIndex]
+		local equipment = self.Equipment
+		local skiFrame = (if spec.Ski > 0 then rightTarget else leftTarget) * self.SkiOffset
+		local z = if spec.Z == "Tail" then equipment.Length / 2 - 0.5 else spec.Z
+		grabHand = spec.Hand
+		grabPoint = (skiFrame * CFrame.new(spec.Ski * equipment.Width / 2, equipment.Thickness / 2 + 0.1, z)).Position
+	end
+	local upperTorso = lowerTorso * self.WaistC0 * waistT * self.WaistC1:Inverse()
 
 	-- Arms, with the pole plant on the inside of a new turn
 	local plant = 0
@@ -618,9 +691,23 @@ function RiderPose:Apply()
 		local extra = staggerArms[side]
 		local forward = rad(current.ArmForward + style.PlantForward * plantAmount + style.CarveArmForward * inside + style.BrakeArmForward * current.Brake + extra[1])
 		local out = armOut + rad(style.CarveArmOut * outside + style.BrakeArmOut * current.Brake + extra[2])
-		shoulder.Transform = CFrame.Angles(0, 0, side * out) * CFrame.Angles(forward, 0, 0)
-		elbowJoint.Transform = CFrame.Angles(elbow, 0, 0)
-		wrist.Transform = CFrame.Angles(rad(current.Wrist + style.PlantWrist * plantAmount), 0, 0)
+		local shoulderT = CFrame.Angles(0, 0, side * out) * CFrame.Angles(forward, 0, 0)
+		local elbowT = CFrame.Angles(elbow, 0, 0)
+		local wristT = CFrame.Angles(rad(current.Wrist + style.PlantWrist * plantAmount), 0, 0)
+		if grabHand == side and grabPoint then
+			-- Reach the hand to the ski (two-bone IK, elbow bending back)
+			local data = self.Arms[side]
+			local shoulderPivot = upperTorso * data.ShoulderC0
+			local wristTarget = grabPoint + (shoulderPivot.Position - grabPoint).Unit * 0.3
+			local grabShoulder, grabElbow = solveTwoBone(shoulderPivot, wristTarget, data.Upper, data.Lower, -1)
+			local weight = math.min(grabWeight, 1)
+			shoulderT = shoulderT:Lerp(grabShoulder, weight)
+			elbowT = elbowT:Lerp(grabElbow, weight)
+			wristT = wristT:Lerp(CFrame.identity, weight)
+		end
+		shoulder.Transform = shoulderT
+		elbowJoint.Transform = elbowT
+		wrist.Transform = wristT
 	end
 	arm(joints.LeftShoulder, joints.LeftElbow, joints.LeftWrist, -1, leftPlant)
 	arm(joints.RightShoulder, joints.RightElbow, joints.RightWrist, 1, rightPlant)
@@ -661,8 +748,8 @@ function RiderPose:ApplyBoard()
 	local edge = current.Edge
 	local toe, heel = math.max(edge, 0), math.max(-edge, 0)
 	local tweak = current.Tweak
-	local indy, melon, method = current.Indy, current.Melon, current.Method
-	local grab = math.min(indy + melon + method, 1)
+	local indy, melon, method, tailGrab = current.Indy, current.Melon, current.Method, current.Tail
+	local grab = math.min(indy + melon + method + tailGrab, 1)
 	local idle = if self.Air then 0 else 1
 
 	-- Board tweak (board space). On the snow the board stays flat on its base (it only edges
@@ -676,7 +763,7 @@ function RiderPose:ApplyBoard()
 	local digDepth, digPitch = self:DigOffset("Board")
 	local boardOffset = CFrame.new(0, -digDepth, 0) * CFrame.Angles(digPitch, 0, 0) * skid
 		* CFrame.new(0, lift, 0)
-		* CFrame.Angles(rad(cfg.MethodPitch) * method, 0, 0)
+		* CFrame.Angles(rad(cfg.MethodPitch) * method - rad(cfg.TailGrabPitch) * tailGrab, 0, 0)
 		* CFrame.Angles(0, 0, roll)
 		* CFrame.Angles(rad(cfg.TweakAngle) * tweak, 0, 0)
 
@@ -768,11 +855,18 @@ function RiderPose:ApplyBoard()
 			elbowT = elbowT:Lerp(dragElbow, drag)
 		end
 
-		-- Grab: indy is the rear hand on the toe edge; melon and method the front hand on the heel edge
-		local weight = if isFront then melon + method else indy
+		-- Grab: indy is the rear hand on the toe edge; melon and method the front hand on the
+		-- heel edge; tail grab the rear hand on the tail
+		local weight = if isFront then melon + method else indy + tailGrab
 		if weight > 0.01 then
 			local edgeX = (if isFront then -toeSign else toeSign) * spec.Width / 2
-			local grip = (boardFrame * CFrame.new(edgeX, spec.Thickness / 2 + 0.1, if isFront then -grabZ else grabZ)).Position
+			local gripZ = if isFront then -grabZ else grabZ
+			if not isFront and tailGrab > indy then
+				-- The tail is the board's +Z end (the nose leads at -Z)
+				edgeX = 0
+				gripZ = self.BoardFlat / 2 * 0.9
+			end
+			local grip = (boardFrame * CFrame.new(edgeX, spec.Thickness / 2 + 0.1, gripZ)).Position
 			local shoulderPivot = upperTorso * arm.ShoulderC0
 			local wristTarget = grip + (shoulderPivot.Position - grip).Unit * 0.3
 			local grabShoulder, grabElbow = solveTwoBone(shoulderPivot, wristTarget, arm.Upper, arm.Lower, -1)
