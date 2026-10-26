@@ -170,6 +170,18 @@ return {
 	ChargeResponsiveness = 18,
 	PopDuration = 0.18,
 	PopResponsiveness = 30,
+	-- Digging into powder: the gear (only the visible gear, not the rider's physics body) sits
+	-- lower in the snow, nose up and tail down, so the terrain covers its tail. Only on powder
+	-- (Snow), not on groomed snow; eases out on takeoff.
+	Dig = {
+		-- Gear is 0.12 thick: at these depths its top stays above the snow at the bindings,
+		-- while the edges and the tail go under
+		Ski = { Depth = 0.05, Pitch = 1.2 }, -- studs lower at the boot, degrees nose-up (skis are long: small pitch)
+		Board = { Depth = 0.07, Pitch = 3 },
+		InRate = 6,
+		OutRate = 20,
+	},
+
 	-- Takeoff to touchdown (both sports)
 	Landing = {
 		-- Knees compress per stud/s of impact, up to Max, and spring back at Recovery

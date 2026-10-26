@@ -102,6 +102,12 @@ local function groundNormal(player: Player, root: BasePart): Vector3
 	return if hit then hit.Normal else Vector3.yAxis
 end
 
+-- On powder (Snow) right under the rider; groomed snow (Salt / Limestone) and rock aren't
+local function onPowder(root: BasePart): boolean
+	local hit = workspace:Raycast(root.Position, Vector3.new(0, -8, 0), groundParams)
+	return hit ~= nil and hit.Material == Enum.Material.Snow
+end
+
 local function localInput()
 	local state = Movement.State
 	return {
@@ -208,6 +214,7 @@ local function step(dt: number)
 			-- body already follows the slope, and only the extra roll into a carve should lift
 			-- the inside ski
 			input.Lean = math.asin(math.clamp(root.CFrame.RightVector:Dot(groundNormal(player, root)), -1, 1))
+			input.Powder = not input.Air and onPowder(root)
 			-- Spin rate drives the upper body leading a spin; speed sets how deep carves go
 			input.Spin = root.AssemblyAngularVelocity.Y
 			-- Where the rider is going, for the head to look along (and spot landings)

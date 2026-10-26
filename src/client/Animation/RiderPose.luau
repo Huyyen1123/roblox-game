@@ -202,6 +202,7 @@ function RiderPose.new(character: Model, sportId: string?, stance: string?)
 		LookSide = 1,
 		-- Landing reactions: hard-landing fold (1 → 0) and the stumble stagger
 		Hard = 0,
+		Dig = 0, -- 0..1, how far the gear has settled into powder
 		StumbleTime = 0,
 		StumbleAmount = 0,
 		StumbleSide = 1,
@@ -244,6 +245,10 @@ function RiderPose:Update(dt: number, input)
 	self.PlantTime += dt
 	self.PopTime += dt
 	local landing = PoseConfig.Landing
+	-- Settle into powder on the snow; lift out quickly on takeoff
+	local digTarget = if input.Powder then 1 else 0
+	local digRate = if digTarget > self.Dig then PoseConfig.Dig.InRate else PoseConfig.Dig.OutRate
+	self.Dig += (digTarget - self.Dig) * (1 - math.exp(-digRate * dt))
 	self.LandingCrouch *= math.exp(-landing.Recovery * dt)
 	self.Hard *= math.exp(-landing.HardRecovery * dt)
 	-- Stumble stagger: starts strong and settles; eases away once the stumble is over
@@ -466,6 +471,15 @@ function RiderPose:Stagger(): (number, number, { [number]: { number } })
 	return pelvis, torso, arms
 end
 
+-- How far the gear sits down into powder, and its nose-up pitch (radians). The nose is the
+-- end facing the travel direction, which is behind the body when riding switch.
+function RiderPose:DigOffset(kind: string): (number, number)
+	local dig = PoseConfig.Dig[kind]
+	local amount = self.Dig
+	local pitch = math.rad(dig.Pitch) * amount * (if self.Switch then -1 else 1)
+	return dig.Depth * amount, pitch
+end
+
 -- Where each foot's centre must be (root space): on its ski's track, or in its board binding.
 function RiderPose:FootTargets(): (CFrame, CFrame)
 	local equipment = self.Equipment
@@ -489,8 +503,11 @@ function RiderPose:FootTargets(): (CFrame, CFrame)
 	local half = equipment.Spacing / 2 + brake * style.SnowplowWiden
 	local toeIn = math.rad(style.SnowplowAngle) * brake
 	local leftX, rightX = -half + shift, half + shift
-	return CFrame.new(leftX, y - leftX * slope, z) * CFrame.Angles(0, -toeIn, 0),
-		CFrame.new(rightX, y - rightX * slope, z) * CFrame.Angles(0, toeIn, 0)
+	-- Dug into powder: lower, tail down (Rx > 0 lowers +Z, the tail)
+	local depth, pitch = self:DigOffset("Ski")
+	local dig = CFrame.Angles(pitch, 0, 0)
+	return CFrame.new(leftX, y - depth - leftX * slope, z) * CFrame.Angles(0, -toeIn, 0) * dig,
+		CFrame.new(rightX, y - depth - rightX * slope, z) * CFrame.Angles(0, toeIn, 0) * dig
 end
 
 --[[
@@ -655,7 +672,9 @@ function RiderPose:ApplyBoard()
 		- rad(cfg.AirTilt) * current.AirTilt
 	local lift = cfg.AirLift * current.Lift + cfg.GrabLift * grab
 	local skid = CFrame.Angles(0, toeSign * rad(cfg.SkidYaw) * current.Brake, 0)
-	local boardOffset = skid
+	-- Dug into powder: the board sits lower, nose up and tail down (Rx > 0 lowers +Z, the tail)
+	local digDepth, digPitch = self:DigOffset("Board")
+	local boardOffset = CFrame.new(0, -digDepth, 0) * CFrame.Angles(digPitch, 0, 0) * skid
 		* CFrame.new(0, lift, 0)
 		* CFrame.Angles(rad(cfg.MethodPitch) * method, 0, 0)
 		* CFrame.Angles(0, 0, roll)

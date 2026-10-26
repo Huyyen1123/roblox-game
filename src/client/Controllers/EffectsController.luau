@@ -1,8 +1,8 @@
 --[[
 	EffectsController
 	Riding feedback for every rider near the camera (see EffectsConfig):
-	  - Deep powder: snow built up around each ski / the board and a compressed trench behind
-	    it (client/Effects/PowderCollar).
+	  - The channel each ski / the board cuts into the snow, left as a trail
+	    (client/Effects/SnowGroove). The digging-in itself is in the riding pose.
 	  - Snow spray off the outside edge while carving, off both edges while braking, and a
 	    light dust at speed.
 	  - Landing puffs.
@@ -22,7 +22,7 @@ local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
 local Create = require(ReplicatedStorage.Shared.Util.Create)
-local PowderCollar = require(script.Parent.Parent.Effects.PowderCollar)
+local SnowGroove = require(script.Parent.Parent.Effects.SnowGroove)
 
 local EffectsController = {}
 
@@ -75,8 +75,8 @@ local function destroyRig(rig)
 	for _, instance in rig.Instances do
 		instance:Destroy()
 	end
-	for _, collar in rig.Collars do
-		collar:Destroy()
+	for _, groove in rig.Grooves do
+		groove:Destroy()
 	end
 end
 
@@ -91,11 +91,11 @@ local function buildRig(character: Model, equipment: Model)
 	local inset = EffectsConfig.Trail.Inset
 	local instances = {}
 	local trails = {}
-	-- Deep-powder collar and compressed trench for each ski / the board
-	local collars = {}
+	-- The channel each ski / the board cuts into the snow
+	local grooves = {}
 	for _, gear in equipment:GetChildren() do
 		if gear:IsA("BasePart") and (gear.Name == "Ski" or gear.Name == "Board") then
-			table.insert(collars, PowderCollar.new(gear, gear.Name))
+			table.insert(grooves, SnowGroove.new(gear))
 		end
 	end
 
@@ -143,7 +143,7 @@ local function buildRig(character: Model, equipment: Model)
 		Root = root,
 		Instances = instances,
 		Trails = trails,
-		Collars = collars,
+		Grooves = grooves,
 		Dirty = false,
 		RideHeight = -snowY + 0.04,
 		Left = newEmitter(leftAtt, Enum.NormalId.Left),
@@ -166,11 +166,11 @@ local function riderInput(character: Model)
 	return true, speed, character:GetAttribute("RiderAir") == true, character:GetAttribute("RiderBrake") == true, character:GetAttribute("RiderSteer") or 0
 end
 
--- Moves every collar's snow shapes in one BulkMoveTo
+-- Groove anchors for every rider are moved together in one BulkMoveTo
 local moveParts, moveCFrames = {}, {}
-local function updateCollars(rig, dt: number, contact: boolean, steer: number, speed: number, braking: boolean)
-	for _, collar in rig.Collars do
-		collar:Update(dt, contact, steer, speed, braking, moveParts, moveCFrames)
+local function updateGrooves(rig, contact: boolean, speed: number)
+	for _, groove in rig.Grooves do
+		groove:Update(contact, speed, moveParts, moveCFrames)
 	end
 end
 
@@ -179,7 +179,7 @@ local function setActive(rig, active: boolean)
 		trail.Enabled = active
 	end
 	if not active then
-		updateCollars(rig, 1, false, 0, 0, false)
+		updateGrooves(rig, false, 0)
 	end
 	if not active then
 		rig.Left.Rate = 0
@@ -199,9 +199,6 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	-- Landing puff (other riders: detected from the air flag; local: from Movement.Landed)
 	if rig.WasAir and not air and character ~= localPlayer.Character then
 		rig.Puff:Emit(EffectsConfig.LandingPuff.Base)
-		for _, collar in rig.Collars do
-			collar:OnLanded(30)
-		end
 	end
 	rig.WasAir = air
 
@@ -209,11 +206,11 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	-- keeps effects off rock and ice, and off riders whose air flag hasn't arrived yet)
 	local grounded = not air
 	if grounded then
-		local hit = workspace:Raycast(rig.Root.Position, -rig.Root.CFrame.UpVector * (rig.RideHeight + EffectsConfig.Powder.ContactDistance), contactParams)
+		local hit = workspace:Raycast(rig.Root.Position, -rig.Root.CFrame.UpVector * (rig.RideHeight + EffectsConfig.Groove.ContactDistance), contactParams)
 		grounded = hit ~= nil and snowMaterials[hit.Material] == true
 	end
-	local nearPowder = (rig.Root.Position - cameraPosition).Magnitude < EffectsConfig.Powder.MaxDistance
-	updateCollars(rig, rig.Dt or 1 / 60, grounded and nearPowder, steer, speed, braking)
+	local nearGroove = (rig.Root.Position - cameraPosition).Magnitude < EffectsConfig.Groove.MaxDistance
+	updateGrooves(rig, grounded and nearGroove, speed)
 	for _, trail in rig.Trails do
 		trail.Enabled = grounded and speed > EffectsConfig.Trail.MinSpeed
 	end
@@ -339,9 +336,6 @@ function EffectsController.Start(movementController)
 		if rig then
 			local settings = EffectsConfig.LandingPuff
 			rig.Puff:Emit(math.min(settings.Base + impact * settings.PerImpact, settings.Max))
-			for _, collar in rig.Collars do
-				collar:OnLanded(impact)
-			end
 		end
 	end)
 	RunService.RenderStepped:Connect(step)
