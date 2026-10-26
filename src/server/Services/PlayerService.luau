@@ -64,8 +64,18 @@ function PlayerService.TeleportTo(player: Player, target: CFrame)
 	Remotes.ResetState:FireClient(player, target)
 end
 
+-- Back to the top of the player's course (Summit Ridge unless a dev teleport chose another)
 local function teleportToStart(player: Player)
-	PlayerService.TeleportTo(player, CourseService.GetSpawnCFrame(spawnSlots[player]))
+	PlayerService.TeleportTo(player, CourseService.GetSpawnCFrame(spawnSlots[player], player:GetAttribute("Course")))
+end
+
+-- Moves a player to another course's start (dev shortcut).
+function PlayerService.SendToCourse(player: Player, courseId: string)
+	if not CourseService.IsCourse(courseId) then
+		return
+	end
+	player:SetAttribute("Course", courseId)
+	teleportToStart(player)
 end
 
 local function onCharacterAdded(player: Player, character: Model)

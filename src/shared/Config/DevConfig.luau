@@ -6,7 +6,8 @@
 	Keys (Studio playtests only):
 	  F6  start / stop a speed log (summary prints to Output)
 	  F7  teleport to the next test lane
-	  F8  teleport back to the course start
+	  F8  Summit Ridge (from the summit)
+	  F9  Frostpeak (from its start gate)
 ]]
 
 return {
@@ -30,6 +31,7 @@ return {
 	Keys = {
 		ToggleSpeedLog = Enum.KeyCode.F6,
 		NextLane = Enum.KeyCode.F7,
-		Course = Enum.KeyCode.F8,
+		SummitRidge = Enum.KeyCode.F8,
+		Frostpeak = Enum.KeyCode.F9,
 	},
 }

@@ -99,7 +99,7 @@ local function hintList()
 			{ "Jump", "A", "Hold to charge jump" },
 			{ "Grab", "X/B/RB", "Grab (board, in the air)" },
 			{ "Camera", "Y", "Camera" },
-			{ "Reset", "Back", "Reset" },
+			{ "Reset", "Back", "Restart at summit" },
 		}
 	end
 	return {
@@ -110,7 +110,7 @@ local function hintList()
 		{ "Grab", "Q / E / F", "Grab: indy, melon, method" },
 		{ "Tweak", "W / S", "Nose / tail tweak (in the air)" },
 		{ "Camera", "V", "Camera" },
-		{ "Reset", "R", "Reset" },
+		{ "Reset", "R", "Restart at summit" },
 	}
 end
 
@@ -274,6 +274,23 @@ local function build()
 	}, { corner(6) })
 	changeSport.Activated:Connect(function()
 		SportSelect.Open()
+	end)
+	-- Restart at the top of the mountain (same as R / the Roblox menu's reset)
+	local restart = Create("TextButton", {
+		Name = "RestartSummit",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, 48),
+		Size = UDim2.fromOffset(112, 26),
+		BackgroundColor3 = Color3.fromRGB(10, 16, 26),
+		BackgroundTransparency = 0.5,
+		Text = "RESTART AT SUMMIT",
+		Font = Enum.Font.GothamBold,
+		TextColor3 = TEXT,
+		TextSize = 10,
+		Parent = screen,
+	}, { corner(6) })
+	restart.Activated:Connect(function()
+		Movement.RequestReset()
 	end)
 	cameraLabel = label({
 		Name = "CameraMode",

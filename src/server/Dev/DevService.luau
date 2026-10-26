@@ -2,7 +2,8 @@
 	DevService (Studio only)
 	Developer tools for measuring and tuning movement:
 	  - builds the test lanes (TestSlopes)
-	  - handles DevTeleport requests: lane index (number) or "Course" (back to the start gate)
+	  - handles DevTeleport requests: lane index (number), or a course id ("SummitRidge",
+	    "Frostpeak") to ride that course from its start
 
 	Init returns immediately outside Studio, and the remote handler re-checks RunService:IsStudio()
 	so a live server can never be asked to teleport anyone.
@@ -29,8 +30,8 @@ function DevService.Init(services)
 		if not RunService:IsStudio() then
 			return
 		end
-		if destination == "Course" then
-			PlayerService.TeleportTo(player, CourseService.GetSpawnCFrame(0))
+		if CourseService.IsCourse(destination) then
+			PlayerService.SendToCourse(player, destination)
 		elseif type(destination) == "number" then
 			local lane = TestSlopes.Lanes[destination]
 			if lane then

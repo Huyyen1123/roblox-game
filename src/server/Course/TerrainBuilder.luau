@@ -45,8 +45,12 @@ local function maybeYield()
 	end
 end
 
--- Surface material for one column.
+-- Surface material for one column. Courses with their own rule (freeride maps) supply
+-- heightfield:ChooseMaterial.
 local function chooseMaterial(heightfield, x: number, z: number, height: number, slope: number)
+	if heightfield.ChooseMaterial then
+		return heightfield:ChooseMaterial(x, z, height, slope)
+	end
 	local world = heightfield.World
 	local materials = world.Materials
 
@@ -92,7 +96,8 @@ local function chooseMaterial(heightfield, x: number, z: number, height: number,
 end
 
 local function writeChunk(terrain: Terrain, heightfield, origin: Vector3, x0: number, z0: number, nx: number, nz: number)
-	local lakeFloor = origin.Y + heightfield.World.ValleySide.FloorY
+	local valley = heightfield.World.ValleySide
+	local lakeFloor = origin.Y + (if valley then valley.FloorY else -math.huge)
 
 	-- Column heights with a 1-column border for slope estimation. The border also counts toward
 	-- minH: each column must stay solid down past its neighbours' surfaces, or steep ground
@@ -180,6 +185,9 @@ end
 local function buildBoulders(terrain: Terrain, heightfield)
 	local course = heightfield.Course
 	local world = heightfield.World
+	if not (course.Rocks and world.Boulders) then
+		return
+	end
 	local origin = course.Origin
 	local random = Random.new(course.Seed + 7)
 
@@ -204,6 +212,25 @@ local function buildBoulders(terrain: Terrain, heightfield)
 			local radius = random:NextNumber(settings.MinRadius, settings.MaxRadius)
 			placeBoulder(terrain, origin + Vector3.new(x, heightfield:GetHeight(x, z) + radius * 0.2, z), radius)
 			placed += 1
+			maybeYield()
+		end
+	end
+end
+
+-- Empties this course's area (used before rebuilding it, so nothing stale is left floating).
+-- Only touches the course's own bounds: other courses sharing the Terrain are untouched.
+function TerrainBuilder.ClearArea(heightfield)
+	local terrain = Workspace.Terrain
+	local origin = heightfield.Course.Origin
+	local minX, maxX, minZ, maxZ = heightfield:GetBounds()
+	-- From below the lowest ground to well above the highest (the start is near the top)
+	local y0 = alignDown(origin.Y + heightfield.MinY - 64)
+	local y1 = alignUp(origin.Y + heightfield.Course.StartY + 900)
+	local step = 256
+	for x = alignDown(origin.X + minX), alignUp(origin.X + maxX) - 1, step do
+		for z = alignDown(origin.Z + minZ), alignUp(origin.Z + maxZ) - 1, step do
+			local region = Region3.new(Vector3.new(x, y0, z), Vector3.new(x + step, y1, z + step))
+			terrain:FillRegion(region:ExpandToGrid(RESOLUTION), RESOLUTION, Enum.Material.Air)
 			maybeYield()
 		end
 	end

@@ -41,6 +41,8 @@ return {
 
 	World = {
 		TerrainVersion = 12,
+		-- Bake marker on Workspace.Terrain (kept as the original name so the baked terrain stays valid)
+		BakeAttribute = "CourseTerrain",
 
 		-- Terrain is generated this far from the centre line / course ends.
 		Extent = { Mountain = 640, Valley = 1500, Uphill = 420, Downhill = 1400 },

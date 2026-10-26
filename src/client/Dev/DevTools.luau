@@ -3,7 +3,8 @@
 	  F6  start / stop a speed log. On stop, a summary and a per-second table print to Output,
 	      and the summary is also stored in the LocalPlayer's "SpeedLogSummary" attribute.
 	  F7  teleport to the next test lane (10° / 18° / 24°)
-	  F8  teleport back to the course start
+	  F8  Summit Ridge (freeride test mountain), from the summit
+	  F9  Frostpeak (original course), from its start gate
 	Speeds are shown in km/h using the same conversion as the HUD.
 ]]
 
@@ -130,8 +131,10 @@ function DevTools.Start(movementController)
 		elseif input.KeyCode == keys.NextLane then
 			remote:FireServer(nextLane)
 			nextLane = nextLane % #DevConfig.TestLanes.Angles + 1
-		elseif input.KeyCode == keys.Course then
-			remote:FireServer("Course")
+		elseif input.KeyCode == keys.SummitRidge then
+			remote:FireServer("SummitRidge")
+		elseif input.KeyCode == keys.Frostpeak then
+			remote:FireServer("Frostpeak")
 		end
 	end)
 
