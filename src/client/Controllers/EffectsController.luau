@@ -225,10 +225,12 @@ local function chooseWakeSlots(cameraPosition: Vector3)
 end
 
 local function updateWake(rig, character: Model, dt: number, contact: boolean, steer: number, speed: number, braking: boolean)
-	local wanted = rig.Board ~= nil and wakeSlots[character] == true
+	local wanted = rig.Board ~= nil and wakeSlots[character] == true and not rig.WakeFailed
 	if wanted and not rig.Wake then
 		local ok, wake = pcall(PowderWake.new, rig.Board)
 		rig.Wake = if ok then wake else nil
+		-- Don't retry every frame (e.g. the client's mesh memory budget is used up)
+		rig.WakeFailed = not ok
 	elseif not wanted and rig.Wake then
 		rig.Wake:Destroy()
 		rig.Wake = nil
@@ -263,6 +265,11 @@ local function setActive(rig, active: boolean)
 	if not active then
 		rig.Left.Rate = 0
 		rig.Right.Rate = 0
+		-- Not riding (respawn, menu) or out of range: drop the mesh wake
+		if rig.Wake then
+			rig.Wake:Destroy()
+			rig.Wake = nil
+		end
 	end
 end
 

@@ -70,56 +70,55 @@ return {
 		Bound = 140, -- mesh bounds (studs); vertices stay within this of the origin
 		Recenter = 45, -- re-centre the mesh when the rider is this far from its origin
 		Color = Color3.fromRGB(236, 242, 250),
-		CastShadow = false,
-		-- Banks along the board: Stations from the leading nose (T = 0) to the tail (T = 1),
-		-- slightly past it; Height = share of Peak. Profile columns from under the board's
-		-- edge (T = 0) to the outer edge Reach studs out (T = 1): H = share of the crest,
-		-- Offset = studs added (the outer edge tucks under the terrain).
-		Banks = {
-			Peak = 0.24,
-			Reach = 1.3,
-			Stations = {
-				{ T = 0, Height = 0 },
-				{ T = 0.15, Height = 0.25 },
-				{ T = 0.32, Height = 0.55 },
-				{ T = 0.5, Height = 0.8 },
-				{ T = 0.68, Height = 1 },
-				{ T = 0.85, Height = 1 },
-				{ T = 1.0, Height = 0.8 },
-				{ T = 1.12, Height = 0.4 },
-			},
-			Profile = {
-				{ T = 0, H = 0.55, Offset = -0.02 },
-				{ T = 0.12, H = 1, Offset = 0 },
-				{ T = 0.35, H = 0.85, Offset = 0 },
-				{ T = 0.65, H = 0.35, Offset = 0 },
-				{ T = 1, H = 0, Offset = -0.12 },
-			},
+		CastShadow = true,
+		StudsPerTile = 22, -- texture scale; matches the PowderSoft snow variant
+		-- Cross-section of the channel, left → right of travel. X in units of (half the board
+		-- width + Extra); Wall = share of the berm height; Offset = studs added. The floor and
+		-- outer edges dive well under the terrain (the rendered terrain can sit a little below
+		-- its collision surface), so the terrain itself is the floor and the berms stand up
+		-- from it; the inner wall face is steep, the outer one a long slope.
+		Extra = 1.4,
+		WallHeight = 0.24,
+		Profile = {
+			{ X = -1, Wall = 0, Offset = -0.3 },
+			{ X = -0.85, Wall = 0.2, Offset = -0.04 },
+			{ X = -0.68, Wall = 0.7, Offset = 0 },
+			{ X = -0.5, Wall = 1, Offset = 0 },
+			{ X = -0.38, Wall = 0.5, Offset = -0.05 },
+			{ X = -0.33, Wall = 0, Offset = -0.35 },
+			{ X = 0.33, Wall = 0, Offset = -0.35 },
+			{ X = 0.38, Wall = 0.5, Offset = -0.05 },
+			{ X = 0.5, Wall = 1, Offset = 0 },
+			{ X = 0.68, Wall = 0.7, Offset = 0 },
+			{ X = 0.85, Wall = 0.2, Offset = -0.04 },
+			{ X = 1, Wall = 0, Offset = -0.3 },
 		},
-		-- Groove behind the board: cross-sections every Spacing studs; X across in units of
-		-- (half the board width + Extra); Wall = share of WallHeight; Offset = studs added (the
-		-- floor and outer edges sit just under the terrain, so the terrain is the floor)
-		Groove = {
-			Sections = 40,
-			Spacing = 0.8,
-			MinSpeed = 3,
-			Extra = 0.9,
-			WallHeight = 0.18,
-			Lifetime = 8,
-			Sink = 0.15,
-			Profile = {
-				{ X = -1, Wall = 0, Offset = -0.12 },
-				{ X = -0.62, Wall = 1, Offset = 0 },
-				{ X = -0.42, Wall = 0, Offset = -0.06 },
-				{ X = 0.42, Wall = 0, Offset = -0.06 },
-				{ X = 0.62, Wall = 1, Offset = 0 },
-				{ X = 1, Wall = 0, Offset = -0.12 },
-			},
+		-- Rows beside the board, from the leading nose (T = 0) toward the tail (the live row
+		-- at the tail, T = 1, follows); Height = share of the berm height
+		Stations = {
+			{ T = 0, Height = 0 },
+			{ T = 0.15, Height = 0.3 },
+			{ T = 0.32, Height = 0.6 },
+			{ T = 0.5, Height = 0.85 },
+			{ T = 0.68, Height = 1 },
+			{ T = 0.85, Height = 1 },
 		},
+		-- Groove behind the board: a cross-section every Spacing studs, up to Sections of them
+		-- (the oldest is reused); the last TaperRows shrink to nothing; each frame 1 in
+		-- AgeStride rows is re-aged
+		Sections = 64,
+		Spacing = 1,
+		TaperRows = 8,
+		AgeStride = 6,
+		Wobble = 0.9, -- uneven berms: height varies by about ± this share / 2 along the groove
+		Spread = 0.8, -- and their outer slope widens / narrows by about ± this share / 2
+		WobbleScale = 0.2, -- per stud travelled
+		Lifetime = 8, -- walls slump to nothing over this many seconds
+		Sink = 0.15, -- and sink this far
 		CarveFullSpeed = 60,
-		CarveRaise = 0.8,
-		CarveLower = 0.5,
-		BrakeRaise = 0.1,
+		CarveRaise = 0.8, -- engaged edge: berm up to this much higher
+		CarveLower = 0.5, -- other edge: this much lower
+		BrakeRaise = 0.1, -- studs added at the front while braking
 		SinkInRate = 8,
 		LiftOutRate = 25,
 		SwellPerImpact = 0.012,

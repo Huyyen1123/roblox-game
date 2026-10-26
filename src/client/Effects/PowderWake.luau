@@ -1,27 +1,35 @@
 --[[
 	PowderWake (prototype, snowboard)
-	Real geometry for a board cutting through powder, built with EditableMesh on the client:
-	  - Side banks: a smooth, continuous snow surface along both edges of the board, rising
-	    from the terrain under the board's edge to a rounded crest and tucking back under the
-	    terrain at its outer edge (no seam). Low at the nose, highest toward the tail, so the
-	    nose rides out. The engaged carving edge builds up, the other side flattens; braking
-	    pushes snow up at the front; landing swells it; it sinks away in the air.
-	  - Groove: a ribbon behind the board with two raised walls (crest above the terrain) and
-	    a floor tucked just under the terrain, so the terrain itself is the floor and the walls
-	    stand up from it. Walls slump and sink as they age.
+	Real geometry for a board cutting through powder, built with EditableMesh on the client.
 
-	Heights are measured from the terrain under each point (raycasts at the nose, middle and
-	tail of the board and along the groove), so the snow always follows the slope. The board,
-	boots and bindings are not touched; this only draws snow around them.
+	One continuous snow surface: a channel the width of the board with a soft berm on each
+	side. It starts at the nose, runs alongside the board and on behind it as the groove, so
+	there is no join between "banks" and "groove": every row of the mesh has the same
+	cross-section and neighbouring rows share their vertices (and so their shading).
+	  - Rows beside the board ("stations", nose → tail): the berms rise from nothing at the
+	    nose to full height toward the tail, so the nose rides out. The engaged carving edge
+	    builds up and the other side flattens; braking pushes snow up at the front; landing
+	    swells it; it sinks away in the air.
+	  - The live row follows the tail every frame, so the groove meets the board.
+	  - Laid rows: a cross-section is left behind every Spacing studs. Walls slump and sink
+	    as they age, and rise and fall a little along the groove.
+
+	Every point is measured from the terrain under it (raycasts), so the snow follows the
+	slope. The floor and outer edges dive under the terrain: the terrain itself is the floor
+	and the berms stand up from it. Texture coordinates come from world position, so the
+	snow texture lines up with the terrain's. The board, boots and bindings are not touched;
+	this only draws snow around them.
 
 	Requires EditableMesh. In a published place that needs the owner's ID verification and
 	"Allow Mesh & Image APIs"; PowderWake.Available() returns false when it can't be used and
 	the caller falls back to the plain groove trail.
 
-	Mesh layout: one EditableMesh per board (banks + groove), shown through one MeshPart.
-	Vertex positions are rewritten every frame (a few hundred SetPosition calls), topology is
-	fixed. Two unused anchor vertices pin the mesh bounds so the MeshPart's scale never
-	changes; the part is re-centred on the rider every so often.
+	Mesh layout: one EditableMesh per board, shown through one MeshPart. The rows beside the
+	board and the live row are rewritten every frame. The laid sections are a ring buffer:
+	a new section overwrites the oldest row and only the triangle strips around it are
+	re-linked, so the cost doesn't grow with the groove's length; older rows are re-aged a
+	few at a time. Two unused anchor vertices pin the mesh bounds so the MeshPart's scale
+	never changes; the part is re-centred on the rider every so often.
 ]]
 
 local AssetService = game:GetService("AssetService")
@@ -70,38 +78,77 @@ local function ground(position: Vector3): (Vector3?, Vector3?)
 	return nil, nil
 end
 
-local function smoothstep(a: number, b: number, x: number): number
-	local t = math.clamp((x - a) / (b - a), 0, 1)
-	return t * t * (3 - 2 * t)
+-- Terrain points and normals across the channel at a position (nil if any miss). spread
+-- widens (> 1) or narrows the berms on each side.
+local function crossSection(center: Vector3, across: Vector3, halfWidth: number, leftSpread: number?, rightSpread: number?)
+	local points, normals = {}, {}
+	for i, column in Settings.Profile do
+		local x = column.X
+		if math.abs(x) > 0.5 then
+			-- Only the berm's outer slope moves; the channel itself keeps the board's width
+			local spread = (if x < 0 then leftSpread else rightSpread) or 1
+			x = math.sign(x) * (0.5 + (math.abs(x) - 0.5) * spread)
+		end
+		local p, n = ground(center + across * (x * halfWidth))
+		if not p then
+			return nil, nil
+		end
+		points[i], normals[i] = p, n
+	end
+	return points, normals
 end
 
--- Adds a grid of vertices (rows × columns) with quads between them, faces pointing up.
--- Returns the vertex id grid [row][column].
-local function addGrid(mesh, rows: number, columns: number, testRowStep: Vector3, testColumnStep: Vector3)
+-- Cheaper cross-section for the rows beside the board, rewritten every frame: three rays
+-- (both outer edges and the middle), the columns in between interpolated
+local function quickSection(center: Vector3, across: Vector3, halfWidth: number)
+	local mid, midN = ground(center)
+	local left, leftN = ground(center - across * halfWidth)
+	local right, rightN = ground(center + across * halfWidth)
+	if not (mid and left and right) then
+		return nil, nil
+	end
+	local points, normals = {}, {}
+	for i, column in Settings.Profile do
+		local x = column.X
+		if x < 0 then
+			points[i], normals[i] = mid:Lerp(left, -x), midN:Lerp(leftN, -x).Unit
+		else
+			points[i], normals[i] = mid:Lerp(right, x), midN:Lerp(rightN, x).Unit
+		end
+	end
+	return points, normals
+end
+
+-- Adds rows × columns vertices (no faces yet), each with its own UV (uvs[vertex]) so the
+-- texture can be mapped from world position. Returns the vertex id grid [row][column].
+local function addRows(mesh, uvs, rows: number, columns: number)
 	local grid = table.create(rows)
 	for r = 1, rows do
 		local row = table.create(columns)
 		for c = 1, columns do
-			row[c] = mesh:AddVertex(testRowStep * r + testColumnStep * c)
+			local id = mesh:AddVertex(Vector3.new(c, 0, r))
+			uvs[id] = mesh:AddUV(Vector2.zero)
+			row[c] = id
 		end
 		grid[r] = row
 	end
-	-- Pick the winding that faces up for this grid's orientation. A triangle's normal is
-	-- (p2 − p1) × (p3 − p1), so (a, b, c) faces up when column × row points up.
-	local flip = testColumnStep:Cross(testRowStep).Y < 0
-	for r = 1, rows - 1 do
-		for c = 1, columns - 1 do
-			local a, b, cc, d = grid[r][c], grid[r][c + 1], grid[r + 1][c], grid[r + 1][c + 1]
-			if flip then
-				mesh:AddTriangle(a, cc, b)
-				mesh:AddTriangle(b, cc, d)
-			else
-				mesh:AddTriangle(a, b, cc)
-				mesh:AddTriangle(b, d, cc)
-			end
+	return grid
+end
+
+-- Joins two rows with a strip of quads. front is the row nearer the nose, back the one
+-- behind it; columns run left → right of travel. A triangle's normal is
+-- (p2 − p1) × (p3 − p1), so in that layout (a, c, b) faces up. Returns the face ids.
+local function addStrip(mesh, uvs, front, back)
+	local faces = {}
+	for c = 1, #front - 1 do
+		local a, b, cc, d = front[c], front[c + 1], back[c], back[c + 1]
+		for _, tri in { { a, cc, b }, { b, cc, d } } do
+			local f = mesh:AddTriangle(tri[1], tri[2], tri[3])
+			mesh:SetFaceUVs(f, { uvs[tri[1]], uvs[tri[2]], uvs[tri[3]] })
+			table.insert(faces, f)
 		end
 	end
-	return grid
+	return faces
 end
 
 function PowderWake.new(gear: BasePart)
@@ -109,26 +156,30 @@ function PowderWake.new(gear: BasePart)
 	self.Gear = gear
 	self.Depth = 0
 	self.Swell = 0
-	self.Sections = {} -- groove cross-sections, newest first: { Points, Normals, Time }
+	self.Order = {} -- slots of the laid sections, newest first
+	self.Slots = {} -- [slot] = laid section
+	self.Links = {} -- [slot] = faces joining that slot's row to the row in front of it
+	self.Tick = 0
 	self.LastSection = nil :: Vector3?
+	self.Travel = math.random() * 100 -- distance along the groove, for the uneven walls
 
 	local mesh = AssetService:CreateEditableMesh()
 	self.Mesh = mesh
+	self.UV = {}
 	local bound = Settings.Bound
 	mesh:AddVertex(Vector3.new(-bound, -bound, -bound))
 	mesh:AddVertex(Vector3.new(bound, bound, bound))
 
-	-- Banks: one grid per side (rows along the board, columns outward from the edge).
-	-- Built with test steps matching their real orientation so the winding faces up.
-	local banks = Settings.Banks
-	self.Banks = {}
-	for _, side in { -1, 1 } do
-		local grid = addGrid(mesh, #banks.Stations, #banks.Profile, Vector3.new(0, 0, 1), Vector3.new(side, 0, 0))
-		table.insert(self.Banks, { Side = side, Grid = grid })
+	-- Rows: the stations beside the board (nose → tail), the live row at the tail, then one
+	-- per laid-section slot. Columns across the channel, left → right of travel. The
+	-- stations and the live row are joined once; slots are joined as sections are laid.
+	local stations = #Settings.Stations
+	self.StationCount = stations
+	self.Grid = addRows(mesh, self.UV, stations + 1 + Settings.Sections, #Settings.Profile)
+	for r = 1, stations do
+		addStrip(mesh, self.UV, self.Grid[r], self.Grid[r + 1])
 	end
-	-- Groove: rows = sections (newest first, going backward), columns across left → right
-	local groove = Settings.Groove
-	self.GrooveGrid = addGrid(mesh, groove.Sections, #groove.Profile, Vector3.new(0, 0, 1), Vector3.new(1, 0, 0))
+	self.LiveRow = self.Grid[stations + 1]
 
 	local part = AssetService:CreateMeshPartAsync(Content.fromObject(mesh))
 	part.Name = "PowderWake"
@@ -156,8 +207,91 @@ function PowderWake:Destroy()
 	self.Mesh:Destroy()
 end
 
+-- Texture mapped from world position (top-down), so it lines up with the terrain's snow
+local uvScale = 1 / Settings.StudsPerTile
 local function setPos(self, id: number, world: Vector3)
 	self.Mesh:SetPosition(id, world - self.Origin)
+	self.Mesh:SetUV(self.UV[id], Vector2.new(world.X * uvScale, world.Z * uvScale))
+end
+
+-- Writes one row across the channel: leftWall / rightWall = studs the berm on each side
+-- rises above the terrain; sink = studs the whole row has sunk
+local function writeRow(self, row, points, normals, leftWall: number, rightWall: number, sink: number)
+	for c, column in Settings.Profile do
+		local wall = if column.X < 0 then leftWall else rightWall
+		setPos(self, row[c], points[c] + normals[c] * (column.Wall * wall + column.Offset - sink))
+	end
+end
+
+-- Folds a row out of sight onto one point
+local function hideRow(self, row, point: Vector3)
+	for _, id in row do
+		setPos(self, id, point)
+	end
+end
+
+local function slotRow(self, slot: number)
+	return self.Grid[self.StationCount + 1 + slot]
+end
+
+local function unlink(self, slot: number)
+	local faces = self.Links[slot]
+	if faces then
+		for _, f in faces do
+			self.Mesh:RemoveFace(f)
+		end
+		self.Links[slot] = nil
+	end
+end
+
+-- Writes a laid section's row. ordinal: 1 = newest; the last TaperRows rows of the groove
+-- shrink to nothing so it doesn't end abruptly. uv: also rewrite texture coordinates (only
+-- needed when the row gets a new section)
+local function writeSection(self, slot: number, ordinal: number, now: number, uv: boolean)
+	local section = self.Slots[slot]
+	local life = math.clamp(1 - (now - section.Time) / Settings.Lifetime, 0, 1)
+	local taper = math.clamp((#self.Order - ordinal) / Settings.TaperRows, 0, 1)
+	local wall = Settings.WallHeight * section.Strength * life * taper
+	local sink = (1 - life) * Settings.Sink
+	local mesh, origin = self.Mesh, self.Origin
+	for c, column in Settings.Profile do
+		local side = if column.X < 0 then section.Left else section.Right
+		local id = slotRow(self, slot)[c]
+		local world = section.Points[c] + section.Normals[c] * (column.Wall * wall * side + column.Offset - sink)
+		if uv then
+			setPos(self, id, world)
+		else
+			mesh:SetPosition(id, world - origin)
+		end
+	end
+end
+
+-- Lays a new section: it takes the oldest slot when the ring is full and is linked between
+-- the live row and the previous newest (unless it starts a new groove after a jump)
+local function lay(self, section, now: number)
+	local order = self.Order
+	local slot
+	if #order >= Settings.Sections then
+		slot = table.remove(order)
+		unlink(self, slot)
+	else
+		slot = #order + 1
+	end
+	local previous = order[1]
+	if previous then
+		unlink(self, previous)
+		if not section.Start then
+			self.Links[previous] = addStrip(self.Mesh, self.UV, slotRow(self, slot), slotRow(self, previous))
+		end
+	end
+	table.insert(order, 1, slot)
+	self.Slots[slot] = section
+	self.Links[slot] = addStrip(self.Mesh, self.UV, self.LiveRow, slotRow(self, slot))
+	writeSection(self, slot, 1, now, true)
+	-- The tail end of the groove tapers: those rows change with every new section
+	for i = math.max(2, #order - Settings.TaperRows), #order do
+		writeSection(self, order[i], i, now, false)
+	end
 end
 
 --[[
@@ -182,99 +316,120 @@ function PowderWake:Update(dt: number, contact: boolean, steer: number, speed: n
 	if (gcf.Position - self.Origin).Magnitude > Settings.Recenter then
 		self.Origin = gcf.Position
 		self.Part.CFrame = CFrame.new(self.Origin)
+		for i, slot in self.Order do
+			writeSection(self, slot, i, now, false)
+		end
 	end
 
-	-- Leading direction along the board (the +Z end leads when riding switch)
+	-- Leading direction along the board (the +Z end leads when riding switch); across = to
+	-- the right of travel
 	local lead = if switch then 1 else -1
 	local half = gear.Size.Z / 2
-	local width = gear.Size.X / 2
-
-	-- Groove: add a cross-section every Spacing studs while on the snow
-	local groove = Settings.Groove
+	local across = gcf.RightVector * -lead
+	local halfWidth = gear.Size.X / 2 + Settings.Extra
 	local tail = gcf * Vector3.new(0, 0, -lead * half)
-	if contact and speed > groove.MinSpeed and (not self.LastSection or (tail - self.LastSection).Magnitude >= groove.Spacing) then
-		-- Across, to the right of travel (keeps the groove's faces pointing up when switch)
-		local across = gcf.RightVector * -lead
-		local points, normals = {}, {}
-		local valid = true
-		for i, column in groove.Profile do
-			local p, n = ground(tail + across * (column.X * (width + groove.Extra)))
-			if not p then
-				valid = false
-				break
-			end
-			points[i], normals[i] = p, n
+
+	-- Carving: the engaged edge builds up, the other side flattens (kept in the groove too)
+	local carve = math.abs(steer) * math.clamp(speed / Settings.CarveFullSpeed, 0, 1)
+	local carveSide = if steer > 0 then 1 elseif steer < 0 then -1 else 0
+	local function sideScale(side: number): number
+		if carveSide == 0 then
+			return 1
 		end
-		if valid then
-			table.insert(self.Sections, 1, { Points = points, Normals = normals, Time = now, Strength = self.Depth })
-			self.Sections[groove.Sections + 1] = nil
-			self.LastSection = tail
-		end
+		return if side == carveSide then 1 + Settings.CarveRaise * carve else 1 - Settings.CarveLower * carve
 	end
 
-	local visible = self.Depth > 0.02 or #self.Sections > 0
+	-- Live row at the tail; lay a section every Spacing studs travelled
+	local live = nil
+	if contact then
+		local start = self.LastSection == nil
+		local moved = if self.LastSection then (tail - self.LastSection).Magnitude else Settings.Spacing
+		local travel = self.Travel + moved
+		-- The berms rise and fall and wander in and out along the groove (two octaves)
+		local scale = Settings.WobbleScale
+		local function wobble(seed: number): number
+			return math.noise(travel * scale, seed) + 0.5 * math.noise(travel * scale * 3.1, seed + 20)
+		end
+		local points, normals = crossSection(tail, across, halfWidth, 1 + Settings.Spread * wobble(40.5), 1 + Settings.Spread * wobble(60.5))
+		if points then
+			live = {
+				Points = points,
+				Normals = normals,
+				Time = now,
+				Strength = self.Depth * (1 + self.Swell), -- landings leave a bigger rim
+				Start = start, -- first section after a jump: not joined to the old groove
+				Left = (1 + Settings.Wobble * wobble(0.5)) * sideScale(-1),
+				Right = (1 + Settings.Wobble * wobble(7.5)) * sideScale(1),
+			}
+			if moved >= Settings.Spacing then
+				self.Travel = travel
+				self.LastSection = tail
+				lay(self, live, now)
+			end
+		end
+	else
+		-- Off the snow: the next contact starts a new groove rather than bridging the gap
+		self.LastSection = nil
+	end
+
+	local order = self.Order
+	local newest = if order[1] then self.Slots[order[1]] else nil
+	local depth = self.Depth * (1 + self.Swell)
+	local visible = depth > 0.02 or newest ~= nil
 	self.Part.Transparency = if visible then 0 else 1
 	if not visible then
 		return
 	end
+	local grid = self.Grid
+	local stations = self.StationCount
 
-	-- Banks along the board
-	local banks = Settings.Banks
-	local carve = math.abs(steer) * math.clamp(speed / Settings.CarveFullSpeed, 0, 1)
-	local carveSide = if steer > 0 then 1 elseif steer < 0 then -1 else 0
-	local depth = self.Depth * (1 + self.Swell)
-	for _, bank in self.Banks do
-		local side = bank.Side
-		local scale = 1
-		if carveSide ~= 0 then
-			scale = if side == carveSide then 1 + Settings.CarveRaise * carve else 1 - Settings.CarveLower * carve
+	-- Live row at the tail. In the air it folds onto the newest laid row, and the rows
+	-- beside the board fold onto it, so nothing is left hanging around the board.
+	if live then
+		writeRow(self, self.LiveRow, live.Points, live.Normals, Settings.WallHeight * live.Strength * live.Left, Settings.WallHeight * live.Strength * live.Right, 0)
+	elseif newest then
+		local newestRow = slotRow(self, order[1])
+		for c, id in self.LiveRow do
+			setPos(self, id, self.Mesh:GetPosition(newestRow[c]) + self.Origin)
 		end
-		local count = #banks.Stations
-		for r = 1, count do
-			-- Rows always run toward the board's +Z end (keeps the faces pointing up); the
-			-- stations (T: 0 = leading nose … 1 = tail, > 1 just past it) are read in the
-			-- matching order
-			local station = banks.Stations[if switch then count + 1 - r else r]
+	else
+		hideRow(self, self.LiveRow, gcf.Position - Vector3.yAxis * 5)
+	end
+
+	-- Stations beside the board: berms grow from the nose toward the tail (shaped like the
+	-- live row: carve and unevenness); braking piles snow at the front
+	local stationsWritten = false
+	if depth > 0.02 and live then
+		local wallHeight = Settings.WallHeight * depth
+		local left = wallHeight * live.Left
+		local right = wallHeight * live.Right
+		stationsWritten = true
+		for r, station in Settings.Stations do
 			local z = lead * half * (1 - 2 * station.T)
-			local crest = banks.Peak * station.Height * scale * depth
-			if braking and station.T < 0.4 then
-				crest += Settings.BrakeRaise * depth
+			local points, normals = quickSection(gcf * Vector3.new(0, 0, z), across, halfWidth)
+			if not points then
+				stationsWritten = false
+				break
 			end
-			-- Terrain under the inner (board edge) and outer columns; interpolate between
-			local inner, innerN = ground(gcf * Vector3.new(side * (width - 0.15), 0, z))
-			local outer, outerN = ground(gcf * Vector3.new(side * (width + banks.Reach), 0, z))
-			if not inner or not outer then
-				inner = (gcf * Vector3.new(side * width, -gear.Size.Y / 2, z))
-				outer, innerN, outerN = inner, gcf.UpVector, gcf.UpVector
-			end
-			for c, column in banks.Profile do
-				local t = column.T -- 0 = under the board's edge, 1 = outer edge
-				local base = inner:Lerp(outer, t)
-				local up = innerN:Lerp(outerN, t).Unit
-				local h = if depth > 0.02 then crest * column.H + column.Offset else -0.2
-				setPos(self, bank.Grid[r][c], base + up * h)
+			local extra = if braking and station.T < 0.4 then Settings.BrakeRaise * depth else 0
+			writeRow(self, grid[r], points, normals, left * station.Height + extra, right * station.Height + extra, 0)
+		end
+	end
+	if not stationsWritten then
+		for r = 1, stations do
+			for c, id in grid[r] do
+				self.Mesh:SetPosition(id, self.Mesh:GetPosition(self.LiveRow[c]))
 			end
 		end
 	end
 
-	-- Groove ribbon: walls slump and sink with age; unused rows fold onto the newest section
-	local sections = self.Sections
-	for r = 1, groove.Sections do
-		local section = sections[r] or sections[#sections]
-		local row = self.GrooveGrid[r]
-		if section then
-			local age = now - section.Time
-			local life = math.clamp(1 - age / groove.Lifetime, 0, 1)
-			local wall = groove.WallHeight * section.Strength * life
-			for c, column in groove.Profile do
-				local h = if sections[r] then column.Wall * wall + column.Offset - (1 - life) * groove.Sink else -0.3
-				setPos(self, row[c], section.Points[c] + section.Normals[c] * h)
-			end
-		else
-			-- No groove yet: hide under the board
-			for c in groove.Profile do
-				setPos(self, row[c], gcf.Position - Vector3.yAxis * 5)
-			end
+	-- Laid rows slump and sink with age: re-age a share of them each frame
+	self.Tick += 1
+	local stride = Settings.AgeStride
+	local phase = self.Tick % stride
+	for i, slot in order do
+		if slot % stride == phase then
+			writeSection(self, slot, i, now, false)
 		end
 	end
 end
