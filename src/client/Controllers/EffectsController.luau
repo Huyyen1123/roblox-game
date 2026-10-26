@@ -79,6 +79,44 @@ local function newEmitter(parent: Attachment, direction: Enum.NormalId)
 	})
 end
 
+local snowMaterials = {}
+for _, name in EffectsConfig.SnowMaterials do
+	snowMaterials[Enum.Material[name]] = true
+end
+local contactParams = RaycastParams.new()
+contactParams.FilterType = Enum.RaycastFilterType.Include
+contactParams.FilterDescendantsInstances = { workspace.Terrain }
+
+-- Two rounded snow ridges along one piece of gear (left and right edge, in the gear's frame)
+local function newSnowEdges(gear: BasePart, instances)
+	local settings = EffectsConfig.SnowEdges
+	local edges = {}
+	for _, side in { -1, 1 } do
+		local part = Create("Part", {
+			Name = "SnowEdge",
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(gear.Size.Z * settings.LengthShare, settings.Diameter, settings.Diameter),
+			Material = Enum.Material.Snow,
+			Color = settings.Color,
+			Transparency = 1,
+			CastShadow = false,
+			Anchored = false,
+			Massless = true,
+			CanCollide = false,
+			CanQuery = false,
+			CanTouch = false,
+			Parent = gear,
+		})
+		-- Cylinder axis (X) along the gear's length, centred on the base edge
+		local offset = CFrame.new(side * (gear.Size.X / 2 + settings.Outset), -gear.Size.Y / 2, 0) * CFrame.Angles(0, math.pi / 2, 0)
+		part.CFrame = gear.CFrame * offset
+		Create("Weld", { Part0 = gear, Part1 = part, C0 = offset, Parent = part })
+		table.insert(instances, part)
+		table.insert(edges, { Part = part, Side = side, Gear = gear, Diameter = settings.Diameter, Shown = false })
+	end
+	return edges
+end
+
 local function destroyRig(rig)
 	for _, instance in rig.Instances do
 		instance:Destroy()
@@ -96,6 +134,7 @@ local function buildRig(character: Model, equipment: Model)
 	local inset = EffectsConfig.Trail.Inset
 	local instances = {}
 	local trails = {}
+	local snowEdges = {}
 	-- Trails ride on the gear itself (skis follow the feet), across the base near the tail
 	for _, gear in equipment:GetChildren() do
 		if gear:IsA("BasePart") and (gear.Name == "Ski" or gear.Name == "Board") then
@@ -104,6 +143,9 @@ local function buildRig(character: Model, equipment: Model)
 			local y = -size.Y / 2 + 0.02
 			local parts = newTrail(gear, Vector3.new(-size.X / 2, y, z), Vector3.new(size.X / 2, y, z))
 			table.insert(trails, parts[1])
+			for _, edge in newSnowEdges(gear, instances) do
+				table.insert(snowEdges, edge)
+			end
 		end
 	end
 
@@ -143,6 +185,8 @@ local function buildRig(character: Model, equipment: Model)
 		Root = root,
 		Instances = instances,
 		Trails = trails,
+		SnowEdges = snowEdges,
+		RideHeight = -snowY + 0.04,
 		Left = newEmitter(leftAtt, Enum.NormalId.Left),
 		Right = newEmitter(rightAtt, Enum.NormalId.Right),
 		Puff = puff,
@@ -162,9 +206,42 @@ local function riderInput(character: Model)
 	return true, speed, character:GetAttribute("RiderAir") == true, character:GetAttribute("RiderBrake") == true, character:GetAttribute("RiderSteer") or 0
 end
 
+local function showEdges(rig, visible: boolean, steer: number?, speed: number?)
+	local settings = EffectsConfig.SnowEdges
+	local carve = 0
+	if steer and speed then
+		carve = math.abs(steer) * math.clamp(speed / settings.CarveSpeed, 0, 1)
+	end
+	for _, edge in rig.SnowEdges do
+		if not visible then
+			if edge.Shown then
+				edge.Part.Transparency = 1
+				edge.Shown = false
+			end
+			continue
+		end
+		-- The edge on the inside of the turn is the one cutting in (body frame: steer > 0
+		-- turns to the body's right, so the right edges engage)
+		local engaged = steer and math.sign(steer) == edge.Side
+		local diameter = settings.Diameter + (if engaged then (settings.CarveDiameter - settings.Diameter) * carve else 0)
+		diameter = math.floor(diameter * 50 + 0.5) / 50 -- quantized: resize only on real changes
+		if diameter ~= edge.Diameter then
+			edge.Diameter = diameter
+			edge.Part.Size = Vector3.new(edge.Part.Size.X, diameter, diameter)
+		end
+		if not edge.Shown then
+			edge.Part.Transparency = 0
+			edge.Shown = true
+		end
+	end
+end
+
 local function setActive(rig, active: boolean)
 	for _, trail in rig.Trails do
 		trail.Enabled = active
+	end
+	if not active then
+		showEdges(rig, false)
 	end
 	if not active then
 		rig.Left.Rate = 0
@@ -187,7 +264,14 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	end
 	rig.WasAir = air
 
+	-- Touching snow: the movement says grounded, and the snow is right under the gear (also
+	-- keeps effects off rock and ice, and off riders whose air flag hasn't arrived yet)
 	local grounded = not air
+	if grounded then
+		local hit = workspace:Raycast(rig.Root.Position, -rig.Root.CFrame.UpVector * (rig.RideHeight + EffectsConfig.SnowEdges.ContactDistance), contactParams)
+		grounded = hit ~= nil and snowMaterials[hit.Material] == true
+	end
+	showEdges(rig, grounded, steer, speed)
 	for _, trail in rig.Trails do
 		trail.Enabled = grounded and speed > EffectsConfig.Trail.MinSpeed
 	end

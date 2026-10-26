@@ -44,6 +44,21 @@ return {
 		VelocityInheritance = 0.55,
 	},
 
+	-- Snow built up along each ski's / the board's edges while it's on the snow, so the gear
+	-- looks like it's cutting into the powder (the base is hidden, the gear stays visible).
+	-- Rounded ridges (half-sunk cylinders) welded to the gear; the edge being carved on grows.
+	SnowEdges = {
+		Diameter = 0.16, -- resting / riding straight (about 0.08 shows above the base)
+		CarveDiameter = 0.34, -- engaged edge at full carve and speed
+		CarveSpeed = 60, -- studs/s at which the carving ridge reaches full size
+		LengthShare = 0.86, -- share of the gear's length covered
+		Outset = 0.03, -- studs outside the gear's side
+		ContactDistance = 0.6, -- gear base within this of the snow counts as touching it
+		Color = Color3.fromRGB(236, 242, 250),
+	},
+	-- Terrain materials that count as snow for effects (spray, edges, trails)
+	SnowMaterials = { "Snow", "Salt", "Limestone" },
+
 	LandingPuff = {
 		Base = 10, -- particles on every landing
 		PerImpact = 0.6, -- more for harder landings (per stud/s of impact)

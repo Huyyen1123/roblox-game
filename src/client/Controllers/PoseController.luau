@@ -89,6 +89,19 @@ local QUALITY_NAMES = { "Clean", "Hard", "Sketchy" }
 local landSeq, landImpact, landQuality = 0, 0, 0
 local seenLandSeq: { [Model]: number } = {}
 
+-- Surface normal under a rider: the local rider's smoothed ground normal from the movement
+-- state; for other riders one short terrain raycast (world up if nothing is below).
+local groundParams = RaycastParams.new()
+groundParams.FilterType = Enum.RaycastFilterType.Include
+groundParams.FilterDescendantsInstances = { workspace.Terrain }
+local function groundNormal(player: Player, root: BasePart): Vector3
+	if player == localPlayer then
+		return Movement.State.Up
+	end
+	local hit = workspace:Raycast(root.Position, -root.CFrame.UpVector * 8, groundParams)
+	return if hit then hit.Normal else Vector3.yAxis
+end
+
 local function localInput()
 	local state = Movement.State
 	return {
@@ -191,7 +204,10 @@ local function step(dt: number)
 		-- the root's roll tells the legs how far the rider leans into a turn
 		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
-			input.Lean = math.asin(math.clamp(root.CFrame.RightVector.Y, -1, 1))
+			-- Lean is measured against the snow surface, not the world: on a cross-slope the
+			-- body already follows the slope, and only the extra roll into a carve should lift
+			-- the inside ski
+			input.Lean = math.asin(math.clamp(root.CFrame.RightVector:Dot(groundNormal(player, root)), -1, 1))
 			-- Spin rate drives the upper body leading a spin; speed sets how deep carves go
 			input.Spin = root.AssemblyAngularVelocity.Y
 			-- Where the rider is going, for the head to look along (and spot landings)
