@@ -1,7 +1,8 @@
 --[[
 	EffectsController
 	Riding feedback for every rider near the camera (see EffectsConfig):
-	  - Trails: thin ribbons behind each ski, one wide ribbon behind a board.
+	  - Deep powder: snow built up around each ski / the board and a compressed trench behind
+	    it (client/Effects/PowderCollar).
 	  - Snow spray off the outside edge while carving, off both edges while braking, and a
 	    light dust at speed.
 	  - Landing puffs.
@@ -21,6 +22,7 @@ local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
 local Create = require(ReplicatedStorage.Shared.Util.Create)
+local PowderCollar = require(script.Parent.Parent.Effects.PowderCollar)
 
 local EffectsController = {}
 
@@ -30,25 +32,6 @@ local rigs = {} -- [character] = rig
 
 local function numberSequence(a: number, b: number)
 	return NumberSequence.new({ NumberSequenceKeypoint.new(0, a), NumberSequenceKeypoint.new(1, b) })
-end
-
-local function newTrail(parent: BasePart, a: Vector3, b: Vector3)
-	local settings = EffectsConfig.Trail
-	local att0 = Create("Attachment", { Name = "TrailA", Position = a, Parent = parent })
-	local att1 = Create("Attachment", { Name = "TrailB", Position = b, Parent = parent })
-	local trail = Create("Trail", {
-		Attachment0 = att0,
-		Attachment1 = att1,
-		Lifetime = settings.Lifetime,
-		Color = ColorSequence.new(settings.Color),
-		Transparency = numberSequence(settings.StartTransparency, 1),
-		LightInfluence = 1,
-		FaceCamera = false,
-		MinLength = 0.2,
-		Enabled = false,
-		Parent = parent,
-	})
-	return { trail, att0, att1 }
 end
 
 local function newEmitter(parent: Attachment, direction: Enum.NormalId)
@@ -87,39 +70,13 @@ local contactParams = RaycastParams.new()
 contactParams.FilterType = Enum.RaycastFilterType.Include
 contactParams.FilterDescendantsInstances = { workspace.Terrain }
 
--- Two rounded snow ridges along one piece of gear (left and right edge, in the gear's frame)
-local function newSnowEdges(gear: BasePart, instances)
-	local settings = EffectsConfig.SnowEdges
-	local edges = {}
-	for _, side in { -1, 1 } do
-		local part = Create("Part", {
-			Name = "SnowEdge",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(gear.Size.Z * settings.LengthShare, settings.Diameter, settings.Diameter),
-			Material = Enum.Material.Snow,
-			Color = settings.Color,
-			Transparency = 1,
-			CastShadow = false,
-			Anchored = false,
-			Massless = true,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-			Parent = gear,
-		})
-		-- Cylinder axis (X) along the gear's length, centred on the base edge
-		local offset = CFrame.new(side * (gear.Size.X / 2 + settings.Outset), -gear.Size.Y / 2, 0) * CFrame.Angles(0, math.pi / 2, 0)
-		part.CFrame = gear.CFrame * offset
-		Create("Weld", { Part0 = gear, Part1 = part, C0 = offset, Parent = part })
-		table.insert(instances, part)
-		table.insert(edges, { Part = part, Side = side, Gear = gear, Diameter = settings.Diameter, Shown = false })
-	end
-	return edges
-end
-
 local function destroyRig(rig)
+	rig.Added:Disconnect()
 	for _, instance in rig.Instances do
 		instance:Destroy()
+	end
+	for _, collar in rig.Collars do
+		collar:Destroy()
 	end
 end
 
@@ -134,18 +91,11 @@ local function buildRig(character: Model, equipment: Model)
 	local inset = EffectsConfig.Trail.Inset
 	local instances = {}
 	local trails = {}
-	local snowEdges = {}
-	-- Trails ride on the gear itself (skis follow the feet), across the base near the tail
+	-- Deep-powder collar and compressed trench for each ski / the board
+	local collars = {}
 	for _, gear in equipment:GetChildren() do
 		if gear:IsA("BasePart") and (gear.Name == "Ski" or gear.Name == "Board") then
-			local size = gear.Size
-			local z = size.Z / 2 - inset
-			local y = -size.Y / 2 + 0.02
-			local parts = newTrail(gear, Vector3.new(-size.X / 2, y, z), Vector3.new(size.X / 2, y, z))
-			table.insert(trails, parts[1])
-			for _, edge in newSnowEdges(gear, instances) do
-				table.insert(snowEdges, edge)
-			end
+			table.insert(collars, PowderCollar.new(gear, gear.Name))
 		end
 	end
 
@@ -180,18 +130,28 @@ local function buildRig(character: Model, equipment: Model)
 	table.insert(instances, rightAtt)
 	table.insert(instances, puffAtt)
 
-	return {
+	local rig
+	-- Gear parts can arrive on the client after the Equipment model itself
+	local added = equipment.ChildAdded:Connect(function(child)
+		if rig and (child.Name == "Ski" or child.Name == "Board") then
+			rig.Dirty = true
+		end
+	end)
+	rig = {
+		Added = added,
 		Equipment = equipment,
 		Root = root,
 		Instances = instances,
 		Trails = trails,
-		SnowEdges = snowEdges,
+		Collars = collars,
+		Dirty = false,
 		RideHeight = -snowY + 0.04,
 		Left = newEmitter(leftAtt, Enum.NormalId.Left),
 		Right = newEmitter(rightAtt, Enum.NormalId.Right),
 		Puff = puff,
 		WasAir = false,
 	}
+	return rig
 end
 
 local function riderInput(character: Model)
@@ -206,33 +166,11 @@ local function riderInput(character: Model)
 	return true, speed, character:GetAttribute("RiderAir") == true, character:GetAttribute("RiderBrake") == true, character:GetAttribute("RiderSteer") or 0
 end
 
-local function showEdges(rig, visible: boolean, steer: number?, speed: number?)
-	local settings = EffectsConfig.SnowEdges
-	local carve = 0
-	if steer and speed then
-		carve = math.abs(steer) * math.clamp(speed / settings.CarveSpeed, 0, 1)
-	end
-	for _, edge in rig.SnowEdges do
-		if not visible then
-			if edge.Shown then
-				edge.Part.Transparency = 1
-				edge.Shown = false
-			end
-			continue
-		end
-		-- The edge on the inside of the turn is the one cutting in (body frame: steer > 0
-		-- turns to the body's right, so the right edges engage)
-		local engaged = steer and math.sign(steer) == edge.Side
-		local diameter = settings.Diameter + (if engaged then (settings.CarveDiameter - settings.Diameter) * carve else 0)
-		diameter = math.floor(diameter * 50 + 0.5) / 50 -- quantized: resize only on real changes
-		if diameter ~= edge.Diameter then
-			edge.Diameter = diameter
-			edge.Part.Size = Vector3.new(edge.Part.Size.X, diameter, diameter)
-		end
-		if not edge.Shown then
-			edge.Part.Transparency = 0
-			edge.Shown = true
-		end
+-- Moves every collar's snow shapes in one BulkMoveTo
+local moveParts, moveCFrames = {}, {}
+local function updateCollars(rig, dt: number, contact: boolean, steer: number, speed: number, braking: boolean)
+	for _, collar in rig.Collars do
+		collar:Update(dt, contact, steer, speed, braking, moveParts, moveCFrames)
 	end
 end
 
@@ -241,7 +179,7 @@ local function setActive(rig, active: boolean)
 		trail.Enabled = active
 	end
 	if not active then
-		showEdges(rig, false)
+		updateCollars(rig, 1, false, 0, 0, false)
 	end
 	if not active then
 		rig.Left.Rate = 0
@@ -261,6 +199,9 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	-- Landing puff (other riders: detected from the air flag; local: from Movement.Landed)
 	if rig.WasAir and not air and character ~= localPlayer.Character then
 		rig.Puff:Emit(EffectsConfig.LandingPuff.Base)
+		for _, collar in rig.Collars do
+			collar:OnLanded(30)
+		end
 	end
 	rig.WasAir = air
 
@@ -268,10 +209,11 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	-- keeps effects off rock and ice, and off riders whose air flag hasn't arrived yet)
 	local grounded = not air
 	if grounded then
-		local hit = workspace:Raycast(rig.Root.Position, -rig.Root.CFrame.UpVector * (rig.RideHeight + EffectsConfig.SnowEdges.ContactDistance), contactParams)
+		local hit = workspace:Raycast(rig.Root.Position, -rig.Root.CFrame.UpVector * (rig.RideHeight + EffectsConfig.Powder.ContactDistance), contactParams)
 		grounded = hit ~= nil and snowMaterials[hit.Material] == true
 	end
-	showEdges(rig, grounded, steer, speed)
+	local nearPowder = (rig.Root.Position - cameraPosition).Magnitude < EffectsConfig.Powder.MaxDistance
+	updateCollars(rig, rig.Dt or 1 / 60, grounded and nearPowder, steer, speed, braking)
 	for _, trail in rig.Trails do
 		trail.Enabled = grounded and speed > EffectsConfig.Trail.MinSpeed
 	end
@@ -359,7 +301,8 @@ local function step(dt: number)
 		local character = player.Character
 		local equipment = character and character:FindFirstChild(Constants.EquipmentModelName)
 		local rig = character and rigs[character]
-		if rig and rig.Equipment ~= equipment then
+		-- Rebuild when the gear changes, or when its parts replicated after the model did
+		if rig and (rig.Equipment ~= equipment or rig.Dirty) then
 			destroyRig(rig)
 			rigs[character] = nil
 			rig = nil
@@ -369,8 +312,15 @@ local function step(dt: number)
 			rigs[character] = rig
 		end
 		if rig then
+			rig.Dt = dt
 			updateRig(rig, character, cameraPosition)
 		end
+	end
+	-- Move every rider's powder shapes in one call
+	if #moveParts > 0 then
+		Workspace:BulkMoveTo(moveParts, moveCFrames, Enum.BulkMoveMode.FireCFrameChanged)
+		table.clear(moveParts)
+		table.clear(moveCFrames)
 	end
 	for character, rig in rigs do
 		if not character.Parent then
@@ -389,6 +339,9 @@ function EffectsController.Start(movementController)
 		if rig then
 			local settings = EffectsConfig.LandingPuff
 			rig.Puff:Emit(math.min(settings.Base + impact * settings.PerImpact, settings.Max))
+			for _, collar in rig.Collars do
+				collar:OnLanded(impact)
+			end
 		end
 	end)
 	RunService.RenderStepped:Connect(step)
