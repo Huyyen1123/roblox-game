@@ -23,6 +23,7 @@ local SportConfig = require(ReplicatedStorage.Shared.Config.SportConfig)
 local CharacterUtil = require(ReplicatedStorage.Shared.Util.CharacterUtil)
 local Create = require(ReplicatedStorage.Shared.Util.Create)
 local SnowGroove = require(script.Parent.Parent.Effects.SnowGroove)
+local PowderWake = require(script.Parent.Parent.Effects.PowderWake)
 
 local EffectsController = {}
 
@@ -77,6 +78,10 @@ local function destroyRig(rig)
 	end
 	for _, groove in rig.Grooves do
 		groove:Destroy()
+	end
+	if rig.Wake then
+		rig.Wake:Destroy()
+		rig.Wake = nil
 	end
 end
 
@@ -144,6 +149,8 @@ local function buildRig(character: Model, equipment: Model)
 		Instances = instances,
 		Trails = trails,
 		Grooves = grooves,
+		Board = equipment:FindFirstChild("Board"),
+		Wake = nil, -- PowderWake, created when this rider gets a full-detail slot
 		Dirty = false,
 		RideHeight = -snowY + 0.04,
 		Left = newEmitter(leftAtt, Enum.NormalId.Left),
@@ -164,6 +171,78 @@ local function riderInput(character: Model)
 	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local speed = if root then root.AssemblyLinearVelocity.Magnitude else 0
 	return true, speed, character:GetAttribute("RiderAir") == true, character:GetAttribute("RiderBrake") == true, character:GetAttribute("RiderSteer") or 0
+end
+
+local function isSwitch(character: Model): boolean
+	if character == localPlayer.Character and Movement then
+		return Movement.State.Switch
+	end
+	return character:GetAttribute("RiderSwitch") == true
+end
+
+-- Full-detail powder wake (prototype, snowboards): the local rider plus the nearest few
+-- riders within range; local rider only at low graphics quality. Timing is measured.
+local wakeSlots = {} -- [character] = true
+local wakeStats = { Frames = 0, Total = 0, Samples = {} }
+_G.PowderWakeStats = wakeStats
+
+local function graphicsQuality(): number
+	local ok, level = pcall(function()
+		return UserSettings().GameSettings.SavedQualityLevel.Value
+	end)
+	-- 0 = Automatic: treat as high
+	return if ok and level > 0 then level else 10
+end
+
+local function chooseWakeSlots(cameraPosition: Vector3)
+	table.clear(wakeSlots)
+	local settings = EffectsConfig.Wake
+	if not settings.Enabled or not PowderWake.Available() then
+		return
+	end
+	local local_ = localPlayer.Character
+	if local_ then
+		wakeSlots[local_] = true
+	end
+	if graphicsQuality() < settings.MinQualityLevel then
+		return
+	end
+	local candidates = {}
+	for character, rig in rigs do
+		if character ~= local_ and rig.Board then
+			local distance = (rig.Root.Position - cameraPosition).Magnitude
+			if distance < settings.MaxDistance then
+				table.insert(candidates, { character, distance })
+			end
+		end
+	end
+	table.sort(candidates, function(a, b)
+		return a[2] < b[2]
+	end)
+	for i = 1, math.min(settings.MaxRemote, #candidates) do
+		wakeSlots[candidates[i][1]] = true
+	end
+end
+
+local function updateWake(rig, character: Model, dt: number, contact: boolean, steer: number, speed: number, braking: boolean)
+	local wanted = rig.Board ~= nil and wakeSlots[character] == true
+	if wanted and not rig.Wake then
+		local ok, wake = pcall(PowderWake.new, rig.Board)
+		rig.Wake = if ok then wake else nil
+	elseif not wanted and rig.Wake then
+		rig.Wake:Destroy()
+		rig.Wake = nil
+	end
+	if rig.Wake then
+		local started = os.clock()
+		rig.Wake:Update(dt, contact, steer, speed, braking, isSwitch(character))
+		local elapsed = os.clock() - started
+		wakeStats.Total += elapsed
+		table.insert(wakeStats.Samples, elapsed)
+		if #wakeStats.Samples > 600 then
+			table.remove(wakeStats.Samples, 1)
+		end
+	end
 end
 
 -- Groove anchors for every rider are moved together in one BulkMoveTo
@@ -199,6 +278,9 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	-- Landing puff (other riders: detected from the air flag; local: from Movement.Landed)
 	if rig.WasAir and not air and character ~= localPlayer.Character then
 		rig.Puff:Emit(EffectsConfig.LandingPuff.Base)
+		if rig.Wake then
+			rig.Wake:OnLanded(30)
+		end
 	end
 	rig.WasAir = air
 
@@ -211,6 +293,7 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 	end
 	local nearGroove = (rig.Root.Position - cameraPosition).Magnitude < EffectsConfig.Groove.MaxDistance
 	updateGrooves(rig, grounded and nearGroove, speed)
+	updateWake(rig, character, rig.Dt or 1 / 60, grounded, steer, speed, braking)
 	for _, trail in rig.Trails do
 		trail.Enabled = grounded and speed > EffectsConfig.Trail.MinSpeed
 	end
@@ -292,8 +375,15 @@ local function updateStreaks(dt: number)
 	end
 end
 
+local slotTimer = 0
 local function step(dt: number)
 	local cameraPosition = Workspace.CurrentCamera.CFrame.Position
+	slotTimer -= dt
+	if slotTimer <= 0 then
+		slotTimer = 0.5
+		chooseWakeSlots(cameraPosition)
+	end
+	wakeStats.Frames += 1
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
 		local equipment = character and character:FindFirstChild(Constants.EquipmentModelName)
@@ -336,6 +426,9 @@ function EffectsController.Start(movementController)
 		if rig then
 			local settings = EffectsConfig.LandingPuff
 			rig.Puff:Emit(math.min(settings.Base + impact * settings.PerImpact, settings.Max))
+			if rig.Wake then
+				rig.Wake:OnLanded(impact)
+			end
 		end
 	end)
 	RunService.RenderStepped:Connect(step)

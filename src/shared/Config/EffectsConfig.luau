@@ -63,6 +63,74 @@ return {
 		MaxDistance = 200, -- grooves for riders within this of the camera
 	},
 
+	-- Prototype: EditableMesh powder wake for the snowboard (client/Effects/PowderWake). Needs
+	-- EditableMesh; falls back to the Groove trail when it isn't available.
+	Wake = {
+		Enabled = true,
+		Bound = 140, -- mesh bounds (studs); vertices stay within this of the origin
+		Recenter = 45, -- re-centre the mesh when the rider is this far from its origin
+		Color = Color3.fromRGB(236, 242, 250),
+		CastShadow = false,
+		-- Banks along the board: Stations from the leading nose (T = 0) to the tail (T = 1),
+		-- slightly past it; Height = share of Peak. Profile columns from under the board's
+		-- edge (T = 0) to the outer edge Reach studs out (T = 1): H = share of the crest,
+		-- Offset = studs added (the outer edge tucks under the terrain).
+		Banks = {
+			Peak = 0.24,
+			Reach = 1.3,
+			Stations = {
+				{ T = 0, Height = 0 },
+				{ T = 0.15, Height = 0.25 },
+				{ T = 0.32, Height = 0.55 },
+				{ T = 0.5, Height = 0.8 },
+				{ T = 0.68, Height = 1 },
+				{ T = 0.85, Height = 1 },
+				{ T = 1.0, Height = 0.8 },
+				{ T = 1.12, Height = 0.4 },
+			},
+			Profile = {
+				{ T = 0, H = 0.55, Offset = -0.02 },
+				{ T = 0.12, H = 1, Offset = 0 },
+				{ T = 0.35, H = 0.85, Offset = 0 },
+				{ T = 0.65, H = 0.35, Offset = 0 },
+				{ T = 1, H = 0, Offset = -0.12 },
+			},
+		},
+		-- Groove behind the board: cross-sections every Spacing studs; X across in units of
+		-- (half the board width + Extra); Wall = share of WallHeight; Offset = studs added (the
+		-- floor and outer edges sit just under the terrain, so the terrain is the floor)
+		Groove = {
+			Sections = 40,
+			Spacing = 0.8,
+			MinSpeed = 3,
+			Extra = 0.9,
+			WallHeight = 0.18,
+			Lifetime = 8,
+			Sink = 0.15,
+			Profile = {
+				{ X = -1, Wall = 0, Offset = -0.12 },
+				{ X = -0.62, Wall = 1, Offset = 0 },
+				{ X = -0.42, Wall = 0, Offset = -0.06 },
+				{ X = 0.42, Wall = 0, Offset = -0.06 },
+				{ X = 0.62, Wall = 1, Offset = 0 },
+				{ X = 1, Wall = 0, Offset = -0.12 },
+			},
+		},
+		CarveFullSpeed = 60,
+		CarveRaise = 0.8,
+		CarveLower = 0.5,
+		BrakeRaise = 0.1,
+		SinkInRate = 8,
+		LiftOutRate = 25,
+		SwellPerImpact = 0.012,
+		MaxSwell = 0.6,
+		SwellRecovery = 4,
+		-- Quality: full wake for the local rider plus the nearest few riders within range
+		MaxRemote = 3,
+		MaxDistance = 120,
+		MinQualityLevel = 4, -- graphics quality below this: local rider only
+	},
+
 	-- Terrain materials that count as snow for effects (spray, edges, trails)
 	SnowMaterials = { "Snow", "Salt", "Limestone" },
 
