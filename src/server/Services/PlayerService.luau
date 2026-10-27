@@ -153,10 +153,8 @@ local function onSelectStance(player: Player, stance: any)
 end
 
 local function onSelectSport(player: Player, sportId: any)
+	-- Allowed mid-race too: both sports share the same stats, so switching gains nothing
 	if not SportConfig.IsValid(sportId) then
-		return
-	end
-	if player:GetAttribute(Attributes.InRace) then
 		return
 	end
 

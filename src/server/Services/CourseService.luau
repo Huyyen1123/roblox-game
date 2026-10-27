@@ -112,7 +112,13 @@ function CourseService.Init()
 
 	Environment.Apply()
 	local killY = math.huge
-	for _, id in Courses.Build do
+	local build = table.clone(Courses.Build)
+	if game:GetService("RunService"):IsStudio() then
+		for _, id in Courses.DevBuild or {} do
+			table.insert(build, id)
+		end
+	end
+	for _, id in build do
 		local definition = Courses.List[id]
 		local heightfield = buildCourse(definition, folder)
 		killY = math.min(killY, definition.Origin.Y + heightfield.MinY - definition.KillDepth)

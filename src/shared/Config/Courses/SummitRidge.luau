@@ -59,7 +59,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 3,
+		TerrainVersion = 4,
 		-- Per-course bake marker on Workspace.Terrain (several courses share one Terrain)
 		BakeAttribute = "CourseTerrain_SummitRidge",
 
@@ -120,11 +120,12 @@ return {
 		Features = {
 			Kickers = {
 				-- Trick park: four sizes in a row, small to extra large. Lip angles (above the
-				-- slope) grow with size: ~20°, 23°, 27°, 29°.
+				-- slope) grow with size: ~20°, 23°, 27°, 32°. Natural air ~0.3, 0.6, 0.65, 1.0 s;
+				-- a charged jump at the XL lip gives ~1.6 s (a double flip).
 				{ Name = "Park S", X = -760, Z = 330, Height = 3, Length = 16, Width = 26 },
 				{ Name = "Park M", X = -760, Z = 520, Height = 5, Length = 24, Width = 30 },
 				{ Name = "Park L", X = -760, Z = 740, Height = 8, Length = 32, Width = 34 },
-				{ Name = "Park XL", X = -760, Z = 1000, Height = 12, Length = 44, Width = 40 },
+				{ Name = "Park XL", X = -760, Z = 1000, Height = 16, Length = 52, Width = 44 },
 				-- Along the routes
 				{ Corridor = 2, Z = 1880, Height = 6, Length = 28, Width = 64 },
 				{ Corridor = 2, Z = 3020, Height = 8, Length = 34, Width = 64 },
@@ -132,7 +133,7 @@ return {
 				{ Corridor = 1, Z = 3800, Height = 4.5, Length = 22, Width = 50 },
 				{ Corridor = 3, Z = 4000, Height = 5, Length = 24, Width = 50 },
 				-- Big air above the finish
-				{ Name = "Big Air", X = 0, Z = 4620, Height = 15, Length = 50, Width = 90 },
+				{ Name = "Big Air", X = 0, Z = 4620, Height = 18, Length = 56, Width = 90 },
 			},
 			-- Frozen lake beside the run-out (flat ice, soft shore)
 			Lake = { X = 620, Z = 5080, RadiusX = 190, RadiusZ = 120, Shore = 0.35, Depth = 1.5 },

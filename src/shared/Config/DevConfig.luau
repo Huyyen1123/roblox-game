@@ -33,5 +33,8 @@ return {
 		NextLane = Enum.KeyCode.F7,
 		SummitRidge = Enum.KeyCode.F8,
 		Frostpeak = Enum.KeyCode.F9,
+		-- Throws the rider straight up (for testing tricks with a known airtime)
+		TrickLaunch = Enum.KeyCode.K,
 	},
+	TrickLaunchSpeed = 60, -- studs/s up: ~1.3 s of air on flat ground
 }

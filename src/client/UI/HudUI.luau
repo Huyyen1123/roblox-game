@@ -433,7 +433,8 @@ function HudUI.Start(movementController, cameraController, sportSelectUI)
 		showCallout(if reason == "Collision" then "WIPEOUT" else "BAD LANDING", CALLOUT_COLORS.Crash)
 	end)
 	Movement.Stumbled:Connect(function(reason)
-		if reason ~= "Recovery" then
+		-- A stumbling landing already has its own callout (e.g. "SKETCHY BACKFLIP")
+		if reason == "Bump" then
 			showCallout("STUMBLE", CALLOUT_COLORS.Sketchy)
 		end
 	end)

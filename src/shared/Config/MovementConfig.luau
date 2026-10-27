@@ -84,9 +84,9 @@ return {
 		AlignWindow = 30,
 		-- Flips (W front, S back): the rotation builds while held and keeps its angle when
 		-- released; within FlipAssistWindow degrees of upright the body eases level.
-		FlipRate = 7.2, -- radians/s at full rotation (~410°/s: a flip in ~0.9 s)
-		FlipAcceleration = 26,
-		FlipStopAcceleration = 18, -- how fast the rotation slows once the key is released
+		FlipRate = 8.5, -- radians/s at full rotation (~490°/s: a flip in ~0.85 s with spin-up)
+		FlipAcceleration = 40,
+		FlipStopAcceleration = 22, -- how fast the rotation slows once the key is released
 		FlipAssistWindow = 25,
 		FlipAssistRate = 2.5,
 		-- Leaving the snow without jumping (crests, bumps) only counts as being in the air for

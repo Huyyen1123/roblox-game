@@ -28,8 +28,9 @@ local YIELD_BUDGET = 0.03
 local MountainBuilder = {}
 
 -- Palette
-local ROCK_COLORS = { Color3.fromRGB(118, 108, 100), Color3.fromRGB(104, 98, 94), Color3.fromRGB(132, 120, 108) }
-local SLATE_COLOR = Color3.fromRGB(86, 84, 88)
+-- Warm brown-greys (reference cliffs); light enough to read in shadow
+local ROCK_COLORS = { Color3.fromRGB(156, 138, 120), Color3.fromRGB(140, 126, 112), Color3.fromRGB(168, 152, 132) }
+local SLATE_COLOR = Color3.fromRGB(118, 112, 112)
 local SNOW_COLOR = Color3.fromRGB(242, 247, 255)
 local NEEDLE_COLORS = { Color3.fromRGB(30, 70, 50), Color3.fromRGB(40, 84, 58) }
 local TRUNK_COLOR = Color3.fromRGB(86, 60, 44)
@@ -422,12 +423,15 @@ local function buildWaterfall(ctx)
 			}, "WedgePart")
 		end
 	end
-	-- Frozen pool at the foot, rimmed with snowy rocks
+	-- Frozen pool at the foot, rimmed with snowy rocks; tilted to the slope so no edge floats
+	local poolX = fall.X - side * 22
+	local poolNormal = hf:GetNormal(poolX, fall.Z)
 	part({
 		Name = "Pool",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(1, 58, 58),
-		CFrame = CFrame.new(base + Vector3.new(-side * 22, 0.35, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		Size = Vector3.new(2, 58, 58),
+		CFrame = CFrame.new(ctx.Origin + Vector3.new(poolX, hf:GetHeight(poolX, fall.Z) - 0.6, fall.Z))
+			* CFrame.fromRotationBetweenVectors(Vector3.xAxis, poolNormal),
 		Color = ICE_COLOR,
 		Material = Enum.Material.Ice,
 		CanCollide = true,

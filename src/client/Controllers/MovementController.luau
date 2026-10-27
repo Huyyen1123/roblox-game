@@ -124,6 +124,7 @@ local wipeoutTimer = 0
 local skipLandingCheck = false
 local lastResetRequest = 0
 local clock = 0
+local pendingLaunch = 0 -- Studio only: upward speed to add next step (DevLaunch)
 local debugCounters = { Bumps = 0, Jumps = 0, Stumbles = 0, Wipeouts = 0 }
 
 local function expAlpha(rate: number, dt: number): number
@@ -296,6 +297,9 @@ local function touchDown(normal: Vector3)
 	-- Landing on a steep slope after a plain jump isn't penalised.
 	local tilt = math.deg(math.acos(math.clamp(root.CFrame.UpVector:Dot(state.Up), -1, 1)))
 	local result = Landing.Evaluate(state.Velocity, state.Heading, normal, stats, Config, tilt)
+	if Config.Debug or RunService:IsStudio() then
+		root:SetAttribute("DebugLastLanding", string.format("%s impact=%.0f angle=%.0f tilt=%.0f air=%.2f", result.Quality, result.Impact, result.Angle, tilt, state.AirTime))
+	end
 	state.Velocity = result.Velocity
 	-- The landing deliberately removes velocity into the surface; don't read that as an impact.
 	impactGrace = math.max(impactGrace, Config.Impact.Grace)
@@ -511,6 +515,17 @@ local function step(dt: number)
 	end
 
 	command = updateJump(dt, ground, command)
+	if pendingLaunch > 0 then
+		state.Velocity += WORLD_UP * pendingLaunch
+		command = state.Velocity
+		pendingLaunch = 0
+		state.Grounded = false
+		state.TrickAir = true
+		jumpedThisAir = true
+		timeSinceGrounded = math.huge
+		groundLock = Config.Jump.GroundLock
+		impactGrace = math.max(impactGrace, Config.Impact.Grace)
+	end
 
 	if wipeoutTimer > 0 then
 		setMode("Wipeout")
@@ -626,6 +641,14 @@ function MovementController.Deactivate()
 	Input.SetRidingEnabled(false)
 	setMode("Inactive")
 	MovementController.Deactivated:Fire()
+end
+
+-- Studio only (DevTools): throw the rider straight up, as from a jump, to test tricks with a
+-- known airtime
+function MovementController.DevLaunch(upSpeed: number)
+	if RunService:IsStudio() and state.Active then
+		pendingLaunch = upSpeed
+	end
 end
 
 function MovementController.IsActive(): boolean

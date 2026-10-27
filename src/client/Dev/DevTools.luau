@@ -135,6 +135,8 @@ function DevTools.Start(movementController)
 			remote:FireServer("SummitRidge")
 		elseif input.KeyCode == keys.Frostpeak then
 			remote:FireServer("Frostpeak")
+		elseif input.KeyCode == keys.TrickLaunch then
+			Movement.DevLaunch(DevConfig.TrickLaunchSpeed)
 		end
 	end)
 
