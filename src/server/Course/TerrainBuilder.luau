@@ -19,7 +19,7 @@ local SHELL_DEPTH = 16
 local YIELD_BUDGET = 0.03 -- seconds of work between yields
 
 local MATERIAL_COLORS = {
-	[Enum.Material.Snow] = Color3.fromRGB(228, 236, 248), -- powder (EnvironmentConfig.TerrainColors)
+	[Enum.Material.Snow] = Color3.fromRGB(192, 200, 214), -- powder (EnvironmentConfig.TerrainColors)
 	[Enum.Material.Salt] = Color3.fromRGB(234, 240, 249), -- groomed: smooth, bright
 	[Enum.Material.Limestone] = Color3.fromRGB(232, 239, 249), -- wind-packed band
 	[Enum.Material.Rock] = Color3.fromRGB(150, 140, 134),

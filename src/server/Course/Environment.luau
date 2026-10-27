@@ -34,6 +34,11 @@ end
 -- Uses each configured MaterialVariant as the override for its base material, when present.
 local function applyMaterialOverrides()
 	for _, entry in Config.MaterialOverrides do
+		if entry.Variant == false then
+			-- The stock material
+			MaterialService:SetBaseMaterialOverride(entry.Material, "")
+			continue
+		end
 		local variant = MaterialService:FindFirstChild(entry.Variant, true)
 		if variant and variant:IsA("MaterialVariant") and variant.BaseMaterial == entry.Material then
 			variant.StudsPerTile = entry.StudsPerTile

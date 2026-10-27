@@ -15,7 +15,7 @@ return {
 		ClockTime = 15.7,
 		GeographicLatitude = 38,
 		Brightness = 2.9,
-		ExposureCompensation = -0.55,
+		ExposureCompensation = -0.75,
 		Ambient = Color3.fromRGB(40, 50, 76),
 		OutdoorAmbient = Color3.fromRGB(118, 134, 170),
 		ColorShift_Top = Color3.fromRGB(255, 224, 182),
@@ -57,7 +57,7 @@ return {
 	-- Terrain colours (multiply the material textures). Powder a touch below pure white so
 	-- sunlit snow keeps its shading.
 	TerrainColors = {
-		[Enum.Material.Snow] = Color3.fromRGB(228, 236, 248),
+		[Enum.Material.Snow] = Color3.fromRGB(192, 200, 214), -- soft grey-white: the grain shows
 		-- Lighter, warmer rock so cliff faces read grey-brown in sun and shadow
 		[Enum.Material.Rock] = Color3.fromRGB(150, 140, 134),
 		[Enum.Material.Slate] = Color3.fromRGB(128, 124, 128),
@@ -83,7 +83,9 @@ return {
 		-- docs/SNOW_SYSTEM_PLAN.md. AlpineSnowWhite1 stays in the place as the previous look.
 		-- Organic pattern randomly rotates and offsets the tiles to hide repetition (not used on
 		-- the groomed line, where the faint corduroy must stay aligned with the fall line).
-		{ Material = Enum.Material.Snow, Variant = "PowderSoft", StudsPerTile = 22, Pattern = Enum.MaterialPattern.Organic },
+		-- Powder uses Roblox's own Snow material: at a normal exposure its fine crystalline
+		-- grain reads as real snow (the custom PowderSoft variant looked flat). false = stock.
+		{ Material = Enum.Material.Snow, Variant = false },
 		{ Material = Enum.Material.Salt, Variant = "GroomedCorduroy", StudsPerTile = 20, PhysicsLike = Enum.Material.Snow },
 		{
 			Material = Enum.Material.Limestone,

@@ -27,6 +27,7 @@ SportSelectUI.Start()
 HudUI.Start(MovementController, CameraController, SportSelectUI)
 RaceUI.Start(MovementController)
 Minimap.Start(MovementController)
+require(script.Effects.Snowfall).Start()
 
 -- Practice spots (T: trick park)
 InputController.SpotRequested:Connect(function(spot)

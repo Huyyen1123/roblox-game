@@ -31,7 +31,7 @@ local MountainBuilder = {}
 -- Warm brown-greys (reference cliffs); light enough to read in shadow
 local ROCK_COLORS = { Color3.fromRGB(156, 138, 120), Color3.fromRGB(140, 126, 112), Color3.fromRGB(168, 152, 132) }
 local SLATE_COLOR = Color3.fromRGB(118, 112, 112)
-local SNOW_COLOR = Color3.fromRGB(242, 247, 255)
+local SNOW_COLOR = Color3.fromRGB(206, 214, 228) -- matches the terrain snow (EnvironmentConfig)
 local NEEDLE_COLORS = { Color3.fromRGB(26, 62, 44), Color3.fromRGB(34, 76, 52) }
 local TRUNK_COLOR = Color3.fromRGB(86, 60, 44)
 local ICE_COLOR = Color3.fromRGB(176, 220, 244)
@@ -1020,7 +1020,7 @@ end
 -- Distant peaks
 ----------------------------------------------------------------------------------------------
 
-local PEAK_SNOW = Color3.fromRGB(236, 242, 252)
+local PEAK_SNOW = Color3.fromRGB(206, 214, 228)
 local PEAK_ROCKS = { Color3.fromRGB(78, 80, 92), Color3.fromRGB(92, 90, 100), Color3.fromRGB(70, 74, 88) }
 
 -- Irregular pyramid: each side its own base extent

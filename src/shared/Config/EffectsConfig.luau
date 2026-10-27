@@ -12,7 +12,7 @@ return {
 	Trail = {
 		Lifetime = 2.5,
 		MinSpeed = 4,
-		Color = Color3.fromRGB(214, 226, 240), -- compressed snow, slightly blue-grey
+		Color = Color3.fromRGB(170, 180, 200), -- compressed snow, slightly blue-grey
 		StartTransparency = 0.45,
 		Inset = 0.25, -- studs in from the tail end
 	},
@@ -59,7 +59,7 @@ return {
 		Lifetime = 6,
 		-- Lit like the snow around it (no glow), tinted toward compressed, shadowed snow
 		LightInfluence = 1,
-		Color = Color3.fromRGB(196, 212, 238),
+		Color = Color3.fromRGB(150, 160, 182), -- a little darker than the snow: pressed-in
 		MinSpeed = 3,
 		ContactDistance = 0.6,
 		MaxDistance = 200, -- grooves for riders within this of the camera
@@ -152,6 +152,20 @@ return {
 		MaxRemote = 3,
 		MaxDistance = 120,
 		MinQualityLevel = 4, -- graphics quality below this: local rider only
+	},
+
+	-- Light snowfall around the camera (visual only). Flakes fall through a box above the
+	-- camera that follows it; fewer on low graphics settings.
+	Snowfall = {
+		Enabled = true,
+		Rate = 170, -- flakes per second at full quality
+		LowQualityScale = 0.4,
+		Area = Vector3.new(120, 1, 120), -- emitter box (studs), centred above the camera
+		Height = 40, -- studs above the camera
+		FallSpeed = NumberRange.new(9, 15),
+		Lifetime = NumberRange.new(5, 7),
+		Size = NumberRange.new(0.3, 0.75),
+		Drift = Vector3.new(2.5, 0, 1.5), -- wind, studs/s²
 	},
 
 	-- Terrain materials that count as snow for effects (spray, edges, trails)
