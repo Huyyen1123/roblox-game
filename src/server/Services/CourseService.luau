@@ -9,8 +9,8 @@
 	marker attribute on Workspace.Terrain ("<course id>:<TerrainVersion>"). When the marker
 	matches the config the terrain is reused; otherwise only that course's area is cleared and
 	regenerated. Run CourseService.Init() in edit mode and save the place to bake. Props,
-	forest and dressing are always rebuilt at runtime (Frostpeak only; freeride maps have none
-	yet).
+	forest and dressing are always rebuilt at runtime (Frostpeak: PropBuilder, ForestBuilder,
+	DressingBuilder; freeride maps: MountainBuilder).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,12 +22,13 @@ local Create = require(ReplicatedStorage.Shared.Util.Create)
 
 local Course = script.Parent.Parent.Course
 local Heightfield = require(Course.Heightfield)
-local FreerideHeightfield = require(Course.FreerideHeightfield)
+local FreerideHeightfield = require(ReplicatedStorage.Shared.Course.FreerideHeightfield)
 local TerrainBuilder = require(Course.TerrainBuilder)
 local PropBuilder = require(Course.PropBuilder)
 local ForestBuilder = require(Course.ForestBuilder)
 local DressingBuilder = require(Course.DressingBuilder)
 local SnowDriftBuilder = require(Course.SnowDriftBuilder)
+local MountainBuilder = require(Course.MountainBuilder)
 local Environment = require(Course.Environment)
 
 local SPAWN_HEIGHT = 5
@@ -81,6 +82,8 @@ local function buildCourse(definition, parent: Instance)
 		trees = ForestBuilder.Build(heightfield, folder)
 		DressingBuilder.Build(heightfield, folder)
 		SnowDriftBuilder.Build(heightfield, folder)
+	else
+		trees = MountainBuilder.Build(heightfield, folder)
 	end
 
 	CourseService.Courses[definition.Id] = { Definition = definition, Heightfield = heightfield, Folder = folder }
@@ -149,6 +152,29 @@ function CourseService.GetSpawnCFrame(slot: number?, courseId: string?): CFrame
 	local z = start.Z - row * SPAWN_SPACING
 	local x = heightfield:CenterX(z) + column * SPAWN_SPACING
 	return heightfield:GetUprightCFrame(x, z, SPAWN_HEIGHT)
+end
+
+-- Whether a course has a named spot ("Summit" always exists)
+function CourseService.HasSpot(courseId: string?, spot: string): boolean
+	if spot == "Summit" then
+		return true
+	end
+	local entry = CourseService.Courses[courseId or Courses.Default]
+	local spots = entry and entry.Definition.Spots
+	return spots ~= nil and spots[spot] ~= nil
+end
+
+-- Where to place a rider for a spot: the summit start, or a practice spot (riders spread
+-- across it by slot)
+function CourseService.GetSpotCFrame(courseId: string?, spot: string, slot: number?): CFrame
+	local entry = CourseService.Courses[courseId or Courses.Default] or CourseService.Courses[Courses.Default]
+	local spots = entry.Definition.Spots
+	local place = spot ~= "Summit" and spots and spots[spot]
+	if not place then
+		return CourseService.GetSpawnCFrame(slot, courseId)
+	end
+	local column = (slot or 0) % 4 - 1.5
+	return entry.Heightfield:GetUprightCFrame(place.X + column * SPAWN_SPACING, place.Z, SPAWN_HEIGHT)
 end
 
 return CourseService

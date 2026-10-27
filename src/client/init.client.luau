@@ -15,6 +15,8 @@ local PoseController = require(Controllers.PoseController)
 local EffectsController = require(Controllers.EffectsController)
 local SportSelectUI = require(UI.SportSelectUI)
 local HudUI = require(UI.HudUI)
+local RaceUI = require(UI.RaceUI)
+local Minimap = require(UI.Minimap)
 
 InputController.Start()
 MovementController.Start(InputController)
@@ -23,6 +25,13 @@ PoseController.Start(MovementController)
 EffectsController.Start(MovementController)
 SportSelectUI.Start()
 HudUI.Start(MovementController, CameraController, SportSelectUI)
+RaceUI.Start(MovementController)
+Minimap.Start(MovementController)
+
+-- Practice spots (T: trick park)
+InputController.SpotRequested:Connect(function(spot)
+	game:GetService("ReplicatedStorage").Remotes.RequestSpot:FireServer(spot)
+end)
 
 if RunService:IsStudio() then
 	require(script.Dev.DevTools).Start(MovementController)

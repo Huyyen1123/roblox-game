@@ -10,6 +10,11 @@
 	             + overall bowl curvature and the rocky boundary walls
 	             + natural relief (large swells, wind ridges along the fall line, rounded drifts,
 	               snowbanks at the foot of the walls), calmed around the start and finish
+	             + features (World.Features): natural kickers shaped into the snow, and a
+	               frozen lake flattened into the valley
+
+	Shared (client and server): the server bakes the terrain and builds the scenery from it,
+	and the client draws the minimap from the same data.
 
 	Noise is a small self-contained value noise (not math.noise), so tools outside Roblox can
 	reproduce the exact same mountain (e.g. to render the minimap image offline).
@@ -108,6 +113,34 @@ function FreerideHeightfield.new(course)
 	end
 	self.StepDrop = slope * corridors.Steps.Period
 
+	-- Features: kickers are placed once (their centre line is fixed at the lip), the lake's
+	-- water level is the lowest ground inside it
+	local features = world.Features or {}
+	self.Kickers = {}
+	for _, kicker in features.Kickers or {} do
+		table.insert(self.Kickers, {
+			X = self:FeatureX(kicker),
+			Z = kicker.Z,
+			Height = kicker.Height,
+			Length = kicker.Length,
+			Width = kicker.Width,
+			Drop = kicker.Length * (kicker.DropShare or 0.5),
+			Name = kicker.Name,
+		})
+	end
+	local lake = features.Lake
+	if lake then
+		local level = math.huge
+		for a = 0, 2 * math.pi, math.pi / 12 do
+			for r = 0, 1, 0.25 do
+				local x = lake.X + math.cos(a) * lake.RadiusX * r
+				local z = lake.Z + math.sin(a) * lake.RadiusZ * r
+				level = math.min(level, self:BaseHeight(x, z))
+			end
+		end
+		self.Lake = { X = lake.X, Z = lake.Z, RadiusX = lake.RadiusX, RadiusZ = lake.RadiusZ, Shore = lake.Shore, Level = level - lake.Depth }
+	end
+
 	-- Lowest generated point, for the kill plane
 	local minY = math.huge
 	for x = -bounds.HalfWidth, bounds.HalfWidth, 64 do
@@ -160,7 +193,67 @@ function FreerideHeightfield:CorridorShape(index: number, z: number): number
 	return 0
 end
 
+-- X of a feature given either directly (X) or as a corridor plus an offset from its centre
+function FreerideHeightfield:FeatureX(feature): number
+	if feature.X then
+		return feature.X
+	end
+	return self:CorridorCenter(feature.Corridor, feature.Z) + (feature.Offset or 0)
+end
+
+-- Height a kicker adds: a curved ramp rising to its lip, then a short drop back to the slope
+local function kickerHeight(kicker, x: number, z: number): number
+	local u = z - kicker.Z
+	if u < -kicker.Length or u > kicker.Drop then
+		return 0
+	end
+	local half = kicker.Width / 2
+	local across = math.abs(x - kicker.X)
+	local shoulder = 14
+	if across > half + shoulder then
+		return 0
+	end
+	local lateral = 1 - smoothstep(half, half + shoulder, across)
+	local along
+	if u <= 0 then
+		local t = (u + kicker.Length) / kicker.Length
+		along = t * t
+	else
+		along = 1 - smoothstep(0, kicker.Drop, u)
+	end
+	return kicker.Height * along * lateral
+end
+
 function FreerideHeightfield:GetHeight(x: number, z: number): number
+	local height = self:BaseHeight(x, z)
+	for _, kicker in self.Kickers do
+		height += kickerHeight(kicker, x, z)
+	end
+	local lake = self.Lake
+	if lake then
+		local dx, dz = (x - lake.X) / lake.RadiusX, (z - lake.Z) / lake.RadiusZ
+		local r = math.sqrt(dx * dx + dz * dz)
+		if r < 1 + lake.Shore then
+			-- Flat ice inside, a soft shore blending back to the ground outside
+			local blend = 1 - smoothstep(1, 1 + lake.Shore, r)
+			height += (math.min(height, lake.Level) - height) * blend
+		end
+	end
+	return height
+end
+
+-- Inside the frozen lake (flat ice)
+function FreerideHeightfield:InLake(x: number, z: number): boolean
+	local lake = self.Lake
+	if not lake then
+		return false
+	end
+	local dx, dz = (x - lake.X) / lake.RadiusX, (z - lake.Z) / lake.RadiusZ
+	return dx * dx + dz * dz < 1
+end
+
+-- The mountain without features
+function FreerideHeightfield:BaseHeight(x: number, z: number): number
 	local world = self.World
 	local seed = self.Seed
 	local c = world.Corridors
@@ -228,18 +321,37 @@ function FreerideHeightfield:GetSlope(x: number, z: number): number
 	return math.sqrt(1 - normal.Y * normal.Y) / normal.Y
 end
 
-function FreerideHeightfield:IsLake(_x: number, _z: number, _height: number): boolean
-	return false
+function FreerideHeightfield:IsLake(x: number, z: number, _height: number): boolean
+	return self:InLake(x, z)
 end
 
--- Powder snow everywhere it can hold; rock bands only on faces too steep for snow.
+-- Powder snow everywhere it can hold; rock bands only on faces too steep for snow; ice on
+-- the frozen lake.
 function FreerideHeightfield:ChooseMaterial(x: number, z: number, _height: number, slope: number)
 	local materials = self.World.Materials
+	if self:InLake(x, z) then
+		return Enum.Material.Glacier
+	end
 	local patch = valueNoise(x / materials.PatchScale, z / materials.PatchScale, self.Seed + 60) * 0.12
 	if slope + patch < materials.RockSlope then
 		return Enum.Material.Snow
 	end
 	return if slope > materials.SlateSlope then Enum.Material.Slate else Enum.Material.Rock
+end
+
+-- World positions (on the snow) of a race checkpoint's beams: Beams = X positions,
+-- Corridors = corridor centres at the checkpoint's Z
+function FreerideHeightfield:CheckpointBeams(checkpoint): { Vector3 }
+	local positions = {}
+	local origin = self.Course.Origin
+	local xs = table.clone(checkpoint.Beams or {})
+	for _, index in checkpoint.Corridors or {} do
+		table.insert(xs, self:CorridorCenter(index, checkpoint.Z))
+	end
+	for _, x in xs do
+		table.insert(positions, origin + Vector3.new(x, self:GetHeight(x, checkpoint.Z), checkpoint.Z))
+	end
+	return positions
 end
 
 -- World-space flat CFrame facing down the fall line (+Z), for spawns.

@@ -27,6 +27,7 @@ local PlayerService = {}
 
 local CourseService
 local EquipmentService
+local RaceService
 
 local lastReset: { [Player]: number } = {}
 local lastSportChange: { [Player]: number } = {}
@@ -64,9 +65,13 @@ function PlayerService.TeleportTo(player: Player, target: CFrame)
 	Remotes.ResetState:FireClient(player, target)
 end
 
--- Back to the top of the player's course (Summit Ridge unless a dev teleport chose another)
+-- Back to the player's spot on their course: the summit (Summit Ridge unless a dev teleport
+-- chose another course), or a practice spot like the trick park. Starts a race run from the
+-- summit.
 local function teleportToStart(player: Player)
-	PlayerService.TeleportTo(player, CourseService.GetSpawnCFrame(spawnSlots[player], player:GetAttribute("Course")))
+	local spot = player:GetAttribute("Spot") or "Summit"
+	PlayerService.TeleportTo(player, CourseService.GetSpotCFrame(player:GetAttribute("Course"), spot, spawnSlots[player]))
+	RaceService.OnPlaced(player, spot)
 end
 
 -- Moves a player to another course's start (dev shortcut).
@@ -75,6 +80,7 @@ function PlayerService.SendToCourse(player: Player, courseId: string)
 		return
 	end
 	player:SetAttribute("Course", courseId)
+	player:SetAttribute("Spot", nil)
 	teleportToStart(player)
 end
 
@@ -236,6 +242,20 @@ local function onRequestReset(player: Player)
 	teleportToStart(player)
 end
 
+-- Go to a named spot ("Summit", "TrickPark"): it becomes where resets take the player
+local function onRequestSpot(player: Player, spot: any)
+	if type(spot) ~= "string" or not CourseService.HasSpot(player:GetAttribute("Course"), spot) then
+		return
+	end
+	local now = os.clock()
+	if now - (lastReset[player] or 0) < MovementConfig.ResetCooldown then
+		return
+	end
+	lastReset[player] = now
+	player:SetAttribute("Spot", if spot == "Summit" then nil else spot)
+	teleportToStart(player)
+end
+
 -- Server-side safety net in case a client never asks for a reset after falling off the world.
 local function startOutOfBoundsWatch()
 	local elapsed = 0
@@ -260,12 +280,14 @@ end
 function PlayerService.Init(services)
 	CourseService = services.CourseService
 	EquipmentService = services.EquipmentService
+	RaceService = services.RaceService
 
 	setupCollisionGroups()
 
 	Remotes.SelectSport.OnServerEvent:Connect(onSelectSport)
 	Remotes.SelectStance.OnServerEvent:Connect(onSelectStance)
 	Remotes.RequestReset.OnServerEvent:Connect(onRequestReset)
+	Remotes.RequestSpot.OnServerEvent:Connect(onRequestSpot)
 	Remotes.RiderState.OnServerEvent:Connect(onRiderState)
 
 	Players.PlayerRemoving:Connect(function(player)

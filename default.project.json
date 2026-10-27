@@ -25,6 +25,12 @@
         },
         "RiderState": {
           "$className": "RemoteEvent"
+        },
+        "RaceEvent": {
+          "$className": "RemoteEvent"
+        },
+        "RequestSpot": {
+          "$className": "RemoteEvent"
         }
       }
     },

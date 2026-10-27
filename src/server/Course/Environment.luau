@@ -55,11 +55,22 @@ end
 function Environment.Apply()
 	apply(Lighting, Config.Lighting)
 	apply(getOrCreate(Lighting, "Atmosphere", "Atmosphere"), Config.Atmosphere)
-	apply(getOrCreate(Lighting, "Sky", "Sky"), Config.Sky)
+	if Config.Sky then
+		apply(getOrCreate(Lighting, "Sky", "Sky"), Config.Sky)
+	else
+		for _, sky in Lighting:GetChildren() do
+			if sky:IsA("Sky") then
+				sky:Destroy()
+			end
+		end
+	end
 	apply(getOrCreate(Lighting, "ColorCorrectionEffect", "ColorCorrection"), Config.ColorCorrection)
 	apply(getOrCreate(Lighting, "BloomEffect", "Bloom"), Config.Bloom)
 	apply(getOrCreate(Lighting, "SunRaysEffect", "SunRays"), Config.SunRays)
 	apply(getOrCreate(Workspace.Terrain, "Clouds", "Clouds"), Config.Clouds)
+	for material, color in Config.TerrainColors or {} do
+		Workspace.Terrain:SetMaterialColor(material, color)
+	end
 	applyMaterialOverrides()
 end
 

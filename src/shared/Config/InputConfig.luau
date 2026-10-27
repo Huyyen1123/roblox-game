@@ -70,6 +70,10 @@ return {
 			Keys = { Enum.KeyCode.R, Enum.KeyCode.ButtonSelect },
 			TouchButton = { Title = "Reset", Position = UDim2.new(1, -95, 1, -165) },
 		},
+		-- Go to the trick park (practice jumps; R then brings you back to the park)
+		TrickPark = {
+			Keys = { Enum.KeyCode.T, Enum.KeyCode.DPadRight },
+		},
 		ZoomIn = {
 			Keys = { Enum.KeyCode.I, Enum.KeyCode.DPadUp },
 		},

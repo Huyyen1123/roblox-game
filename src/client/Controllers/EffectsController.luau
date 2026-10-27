@@ -133,9 +133,22 @@ local function buildRig(character: Model, equipment: Model)
 	local puffAtt = Create("Attachment", { Name = "LandingPuff", Position = Vector3.new(0, snowY + 0.1, 0), Parent = root })
 	local puff = newEmitter(puffAtt, Enum.NormalId.Top)
 	puff.SpreadAngle = Vector2.new(80, 80)
+	-- Rooster tail: a plume thrown up and back from the tail in hard, fast turns
+	local rooster = EffectsConfig.RoosterTail
+	local roosterAtt = Create("Attachment", {
+		Name = "RoosterTail",
+		CFrame = CFrame.new(0, snowY + 0.2, tailZ) * CFrame.Angles(-math.rad(rooster.LaunchAngle), 0, 0), -- back (+Z) tilted up
+		Parent = root,
+	})
+	local roosterEmitter = newEmitter(roosterAtt, Enum.NormalId.Back)
+	roosterEmitter.Speed = rooster.Speed
+	roosterEmitter.SpreadAngle = Vector2.new(14, 22)
+	roosterEmitter.Size = numberSequence(rooster.Size[1], rooster.Size[2])
+	roosterEmitter.Lifetime = rooster.Lifetime
 	table.insert(instances, leftAtt)
 	table.insert(instances, rightAtt)
 	table.insert(instances, puffAtt)
+	table.insert(instances, roosterAtt)
 
 	local rig
 	-- Gear parts can arrive on the client after the Equipment model itself
@@ -158,6 +171,7 @@ local function buildRig(character: Model, equipment: Model)
 		Left = newEmitter(leftAtt, Enum.NormalId.Left),
 		Right = newEmitter(rightAtt, Enum.NormalId.Right),
 		Puff = puff,
+		Rooster = roosterEmitter,
 		WasAir = false,
 	}
 	return rig
@@ -267,6 +281,7 @@ local function setActive(rig, active: boolean)
 	if not active then
 		rig.Left.Rate = 0
 		rig.Right.Rate = 0
+		rig.Rooster.Rate = 0
 		-- Not riding (respawn, menu) or out of range: drop the mesh wake
 		if rig.Wake then
 			rig.Wake:Destroy()
@@ -290,6 +305,10 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 		if rig.Wake then
 			rig.Wake:OnLanded(30)
 		end
+	end
+	-- Takeoff: snow falls away from the gear as it leaves the snow
+	if air and not rig.WasAir and speed > EffectsConfig.Spray.MinSpeed then
+		rig.Puff:Emit(EffectsConfig.LandingPuff.Takeoff)
 	end
 	rig.WasAir = air
 
@@ -325,8 +344,24 @@ local function updateRig(rig, character: Model, cameraPosition: Vector3)
 			right += brake
 		end
 	end
-	rig.Left.Rate = math.min(left, spray.MaxRate)
-	rig.Right.Rate = math.min(right, spray.MaxRate)
+	-- Lighter for distant riders and low graphics settings
+	local scale = 1
+	if (rig.Root.Position - cameraPosition).Magnitude > EffectsConfig.DetailDistance then
+		scale *= EffectsConfig.FarRateScale
+	end
+	if graphicsQuality() < EffectsConfig.LowQualityLevel then
+		scale *= EffectsConfig.LowQualityRateScale
+	end
+	rig.Left.Rate = math.min(left, spray.MaxRate) * scale
+	rig.Right.Rate = math.min(right, spray.MaxRate) * scale
+
+	-- Rooster tail: only in hard turns at speed
+	local rooster = EffectsConfig.RoosterTail
+	local roosterRate = 0
+	if grounded and speed > rooster.MinSpeed and math.abs(steer) > rooster.MinSteer then
+		roosterRate = (speed - rooster.MinSpeed) * (math.abs(steer) - rooster.MinSteer) / (1 - rooster.MinSteer) * rooster.PerSpeed
+	end
+	rig.Rooster.Rate = math.min(roosterRate, rooster.MaxRate) * scale
 end
 
 -- Wind streaks: thin lines drifting outward near the screen edges at high speed

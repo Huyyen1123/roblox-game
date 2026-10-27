@@ -19,7 +19,7 @@ local SHELL_DEPTH = 16
 local YIELD_BUDGET = 0.03 -- seconds of work between yields
 
 local MATERIAL_COLORS = {
-	[Enum.Material.Snow] = Color3.fromRGB(236, 242, 250), -- powder: bright and clean
+	[Enum.Material.Snow] = Color3.fromRGB(228, 236, 248), -- powder (EnvironmentConfig.TerrainColors)
 	[Enum.Material.Salt] = Color3.fromRGB(234, 240, 249), -- groomed: smooth, bright
 	[Enum.Material.Limestone] = Color3.fromRGB(232, 239, 249), -- wind-packed band
 	[Enum.Material.Rock] = Color3.fromRGB(112, 116, 126),
@@ -131,7 +131,8 @@ local function writeChunk(terrain: Terrain, heightfield, origin: Vector3, x0: nu
 			local slopeZ = (column[iz + 1] - column[iz - 1]) / (2 * RESOLUTION)
 			local slope = math.sqrt(slopeX * slopeX + slopeZ * slopeZ)
 			local material = chooseMaterial(heightfield, lx, lz, column[iz] - origin.Y, slope)
-			if material == Enum.Material.Glacier then
+			if material == Enum.Material.Glacier and valley then
+				-- Frostpeak's lake is flattened here (freeride lakes are flat in the heightfield)
 				column[iz] = math.min(column[iz], lakeFloor + 1)
 			end
 			row[iz] = material

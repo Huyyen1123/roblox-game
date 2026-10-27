@@ -28,6 +28,7 @@ local player = Players.LocalPlayer
 local InputController = {}
 InputController.CameraToggled = Signal.new()
 InputController.ResetRequested = Signal.new()
+InputController.SpotRequested = Signal.new() -- (spot name)
 
 local controls = nil
 local ridingEnabled = false
@@ -100,6 +101,11 @@ local actionHandlers = {
 	Reset = function(state: Enum.UserInputState)
 		if state == Enum.UserInputState.Begin then
 			InputController.ResetRequested:Fire()
+		end
+	end,
+	TrickPark = function(state: Enum.UserInputState)
+		if state == Enum.UserInputState.Begin then
+			InputController.SpotRequested:Fire("TrickPark")
 		end
 	end,
 	ZoomIn = function(state: Enum.UserInputState)

@@ -66,7 +66,7 @@ function SnowGroove.new(gear: BasePart)
 		Attachment1 = a1,
 		Texture = Settings.Texture,
 		TextureMode = Enum.TextureMode.Stretch,
-		Color = ColorSequence.new(Color3.new(1, 1, 1)),
+		Color = ColorSequence.new(Settings.Color),
 		Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, Settings.StartTransparency),
 			NumberSequenceKeypoint.new(0.7, (1 + Settings.StartTransparency) / 2),

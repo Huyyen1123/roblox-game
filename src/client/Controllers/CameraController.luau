@@ -64,6 +64,10 @@ local function update(dt: number)
 	if not state.Root then
 		return
 	end
+	-- Studio only: leave the camera alone while a dev tool holds it (screenshots)
+	if RunService:IsStudio() and Workspace:GetAttribute("DevCameraHold") then
+		return
+	end
 	camera.CameraType = Enum.CameraType.Scriptable
 
 	if Input.IsRightMouseDown() then

@@ -5,7 +5,8 @@
 	    and a small status word only when it matters (tuck, brake, get ready).
 	  - Control display, bottom-left, as small chips (always shown while riding).
 	  - Camera mode, shown briefly only when it changes.
-	  - A small "Change Sport" button, top-right.
+	  - Small buttons under the minimap (top-right): change sport, restart at the summit, go
+	    to the trick park.
 	  - Short centre callouts for landings (tricks: flips, spins, grabs), crashes and resets.
 ]]
 
@@ -20,6 +21,9 @@ local Create = require(ReplicatedStorage.Shared.Util.Create)
 local Units = require(ReplicatedStorage.Shared.Util.Units)
 
 local player = Players.LocalPlayer
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+-- Buttons sit under the minimap
+local BUTTONS_TOP = 200
 
 local CAMERA_LABELS = { ThirdPerson = "THIRD PERSON", FirstPerson = "FIRST PERSON" }
 local CALLOUT_COLORS = {
@@ -108,7 +112,8 @@ local function hintList()
 		{ "Brake", "Ctrl", "Brake" },
 		{ "Jump", "Space", "Hold to charge jump" },
 		{ "Camera", "V", "Camera" },
-		{ "Reset", "R", "Restart at summit" },
+		{ "Reset", "R", "Restart" },
+		{ "Park", "T", "Trick park" },
 	}
 end
 
@@ -242,7 +247,7 @@ local function build()
 	local changeSport = Create("TextButton", {
 		Name = "ChangeSport",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 16),
+		Position = UDim2.new(1, -16, 0, BUTTONS_TOP),
 		Size = UDim2.fromOffset(112, 26),
 		BackgroundColor3 = Color3.fromRGB(10, 16, 26),
 		BackgroundTransparency = 0.5,
@@ -255,11 +260,11 @@ local function build()
 	changeSport.Activated:Connect(function()
 		SportSelect.Open()
 	end)
-	-- Restart at the top of the mountain (same as R / the Roblox menu's reset)
+	-- Restart at the top of the mountain (a new race run)
 	local restart = Create("TextButton", {
 		Name = "RestartSummit",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 48),
+		Position = UDim2.new(1, -16, 0, BUTTONS_TOP + 32),
 		Size = UDim2.fromOffset(112, 26),
 		BackgroundColor3 = Color3.fromRGB(10, 16, 26),
 		BackgroundTransparency = 0.5,
@@ -270,7 +275,24 @@ local function build()
 		Parent = screen,
 	}, { corner(6) })
 	restart.Activated:Connect(function()
-		Movement.RequestReset()
+		Remotes.RequestSpot:FireServer("Summit")
+	end)
+	-- Practice jumps without racing (R then returns to the park)
+	local park = Create("TextButton", {
+		Name = "TrickPark",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, BUTTONS_TOP + 64),
+		Size = UDim2.fromOffset(112, 26),
+		BackgroundColor3 = Color3.fromRGB(10, 16, 26),
+		BackgroundTransparency = 0.5,
+		Text = "TRICK PARK (T)",
+		Font = Enum.Font.GothamBold,
+		TextColor3 = TEXT,
+		TextSize = 10,
+		Parent = screen,
+	}, { corner(6) })
+	park.Activated:Connect(function()
+		Remotes.RequestSpot:FireServer("TrickPark")
 	end)
 	cameraLabel = label({
 		Name = "CameraMode",

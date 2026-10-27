@@ -105,6 +105,14 @@ return {
 	NormalSmoothing = 14,
 	MaxGroundAngle = 55,
 
+	-- Natural launches off lips (kickers, drops): the rider leaves the snow when the ground
+	-- turns away faster than Factor frames of gravity could follow (frame-rate independent).
+	Launch = {
+		Factor = 4,
+		MinSpeed = 20,
+		GroundLock = 0.1, -- seconds before the snow can catch the rider again
+	},
+
 	-- Moving backwards along the gear faster than this (studs/s) flips to riding switch
 	SwitchSlideSpeed = 2,
 

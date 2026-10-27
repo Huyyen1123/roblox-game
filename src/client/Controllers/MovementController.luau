@@ -467,6 +467,17 @@ local function step(dt: number)
 	if ground and groundLock <= 0 and ground.Normal.Y >= math.cos(math.rad(Config.MaxGroundAngle)) then
 		local reach = rideHeight + (if wasGrounded then Config.SnapDistance else Config.LandingDistance)
 		canGround = ground.Distance <= reach and (wasGrounded or state.Velocity:Dot(ground.Normal) <= 1)
+		-- Natural launch: at a lip the snow falls away faster than gravity could pull the rider
+		-- down to follow it, so the rider leaves the snow (kickers, drops, sharp crests).
+		-- Gentle rollers bend the path far less per frame and stay glued.
+		local launch = Config.Launch
+		if canGround and wasGrounded and state.Speed > launch.MinSpeed then
+			local away = state.Velocity:Dot(ground.Normal)
+			if away > Config.SlopeGravity * dt * launch.Factor then
+				canGround = false
+				groundLock = launch.GroundLock
+			end
+		end
 	end
 
 	if canGround and not wasGrounded then

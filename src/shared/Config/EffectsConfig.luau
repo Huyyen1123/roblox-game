@@ -50,14 +50,16 @@ return {
 	Groove = {
 		-- Image X runs across the channel (lip, shadowed wall, floor, lit wall, lip)
 		Texture = "rbxassetid://80142138968472",
-		WidthScale = 1.8, -- channel is wider than the gear (its walls)
+		WidthScale = 1.35, -- channel is a little wider than the gear (its walls)
 		-- The channel starts at the front of the gear, so it also runs alongside it: the gear
 		-- sits in a trough instead of on flat snow
 		NoseInset = 0.25,
 		Lift = 0.03, -- above the surface (avoids z-fighting)
-		StartTransparency = 0.05,
+		StartTransparency = 0.55,
 		Lifetime = 6,
-		LightInfluence = 0.35, -- keeps the shading readable against bright sunlit snow
+		-- Lit like the snow around it (no glow), tinted toward compressed, shadowed snow
+		LightInfluence = 1,
+		Color = Color3.fromRGB(196, 212, 238),
 		MinSpeed = 3,
 		ContactDistance = 0.6,
 		MaxDistance = 200, -- grooves for riders within this of the camera
@@ -159,7 +161,26 @@ return {
 		Base = 10, -- particles on every landing
 		PerImpact = 0.6, -- more for harder landings (per stud/s of impact)
 		Max = 50,
+		Takeoff = 8, -- snow falling away from the gear at takeoff
 	},
+
+	-- Plume thrown up and back from the tail in hard, fast turns
+	RoosterTail = {
+		MinSpeed = 45,
+		MinSteer = 0.55,
+		PerSpeed = 1.6, -- particles/s per stud/s above MinSpeed, at full steer
+		MaxRate = 90,
+		LaunchAngle = 35, -- degrees above the snow, thrown backward
+		Speed = NumberRange.new(16, 30),
+		Lifetime = NumberRange.new(0.6, 1.1),
+		Size = { 0.5, 1.8 },
+	},
+
+	-- Spray scaled down for riders beyond DetailDistance and below LowQualityLevel graphics
+	DetailDistance = 120,
+	FarRateScale = 0.4,
+	LowQualityLevel = 4,
+	LowQualityRateScale = 0.5,
 
 	WindStreaks = {
 		Count = 18,

@@ -12,6 +12,13 @@
 	  right   steep pitches with flat benches between (advanced)
 	Snow depth comes from the terrain shape itself (wind ridges, rounded drifts, snowbanks),
 	not from extra parts. Bump TerrainVersion whenever a terrain-affecting value changes.
+
+	Race: start at the summit, finish in the basin. Checkpoints span the whole mountain (any
+	route between them counts); orange beams mark them. Route character:
+	  left    trick park in the upper bowl, then gentle powder and a pine forest to dodge
+	  centre  fast rollers, two big kickers, a cave tunnel
+	  right   steep pitches and benches, a narrow rock passage, the frozen waterfall
+	The lower valley rejoins them for the big air above the finish and the frozen lake.
 ]]
 
 return {
@@ -28,8 +35,31 @@ return {
 	Start = { Z = 0 },
 	Finish = { Z = 5450 },
 
+	-- Race checkpoints (course-local Z; each spans the whole mountain). Beams mark where routes
+	-- cross them: Beams = X positions, or corridor indexes resolved at that Z.
+	Race = {
+		StartLineZ = 40, -- the clock starts when a rider crosses this
+		Checkpoints = {
+			{ Z = 640, Beams = { -760, 0 } },
+			{ Z = 1500, Corridors = { 1, 2, 3 } },
+			{ Z = 2400, Corridors = { 1, 2, 3 } },
+			{ Z = 3300, Corridors = { 1, 2, 3 } },
+			{ Z = 4150, Corridors = { 1, 2, 3 } },
+			{ Z = 4800, Beams = { 0 } },
+		},
+		FinishZ = 5450,
+		-- Checkpoint crossings faster than this (studs/s between checks) are rejected
+		MaxSpeed = 260,
+	},
+
+	-- Places a rider can ask to go (HUD buttons / keys): local X, Z
+	Spots = {
+		Summit = { X = 0, Z = 0 },
+		TrickPark = { X = -760, Z = 200 },
+	},
+
 	World = {
-		TerrainVersion = 1,
+		TerrainVersion = 3,
 		-- Per-course bake marker on Workspace.Terrain (several courses share one Terrain)
 		BakeAttribute = "CourseTerrain_SummitRidge",
 
@@ -82,5 +112,84 @@ return {
 
 		-- Snow everywhere; rock only where it's too steep to hold snow (> ~45°)
 		Materials = { RockSlope = 1.0, SlateSlope = 1.35, PatchScale = 26 },
+
+		-- Shaped into the terrain (FreerideHeightfield). Kickers: X, or Corridor (+ Offset);
+		-- Z is the lip; Height above the slope; Length of the ramp; Width. The lip angle above
+		-- the slope is about atan(2 · Height / Length); behind the lip the snow rolls back
+		-- down over half the ramp length (a knuckle) onto the natural landing slope.
+		Features = {
+			Kickers = {
+				-- Trick park: four sizes in a row, small to extra large. Lip angles (above the
+				-- slope) grow with size: ~20°, 23°, 27°, 29°.
+				{ Name = "Park S", X = -760, Z = 330, Height = 3, Length = 16, Width = 26 },
+				{ Name = "Park M", X = -760, Z = 520, Height = 5, Length = 24, Width = 30 },
+				{ Name = "Park L", X = -760, Z = 740, Height = 8, Length = 32, Width = 34 },
+				{ Name = "Park XL", X = -760, Z = 1000, Height = 12, Length = 44, Width = 40 },
+				-- Along the routes
+				{ Corridor = 2, Z = 1880, Height = 6, Length = 28, Width = 64 },
+				{ Corridor = 2, Z = 3020, Height = 8, Length = 34, Width = 64 },
+				{ Corridor = 1, Z = 1420, Height = 3.5, Length = 18, Width = 46 },
+				{ Corridor = 1, Z = 3800, Height = 4.5, Length = 22, Width = 50 },
+				{ Corridor = 3, Z = 4000, Height = 5, Length = 24, Width = 50 },
+				-- Big air above the finish
+				{ Name = "Big Air", X = 0, Z = 4620, Height = 15, Length = 50, Width = 90 },
+			},
+			-- Frozen lake beside the run-out (flat ice, soft shore)
+			Lake = { X = 620, Z = 5080, RadiusX = 190, RadiusZ = 120, Shore = 0.35, Depth = 1.5 },
+		},
+
+		-- Scenery built from parts (server/Course/MountainBuilder), placed from the terrain
+		Scenery = {
+			-- Pine forest: jittered grid, density from noise stands plus the sections below
+			Forest = {
+				Spacing = 22,
+				BaseDensity = 0.04,
+				StandScale = 260,
+				StandDensity = 0.42, -- extra density inside stands
+				MaxSlope = 0.85,
+				-- Dense sections riders thread through (no clear lane)
+				Sections = {
+					{ Corridor = 1, FromZ = 1700, ToZ = 2700, HalfWidth = 170, Density = 0.42 },
+					{ Corridor = 3, FromZ = 3350, ToZ = 3800, HalfWidth = 150, Density = 0.3 },
+				},
+				-- Kept clear: fast lanes and feature run-ins (corridor, half width)
+				ClearLanes = {
+					{ Corridor = 2, HalfWidth = 46 },
+					{ Corridor = 3, HalfWidth = 30 },
+				},
+				ClearRadius = 70, -- around kickers, checkpoint beams, the cave and the start/finish
+				ParkLane = { X = -760, HalfWidth = 70, FromZ = 150, ToZ = 1150 },
+				ColliderDistance = 150, -- trees this close to a corridor centre get a trunk collider
+			},
+			-- Angular rock formations
+			Rocks = {
+				RidgeSpacing = 230, -- clusters along the ridgelines between corridors
+				WallSpacing = 70, -- cliff columns along the boundary walls
+				WallX = 1095,
+				-- A narrow rock passage across the right corridor (gap at its centre)
+				Passage = { Corridor = 3, Z = 2650, Gap = 34, Depth = 70 },
+				-- Rock outcrops and drops placed by hand
+				Outcrops = {
+					{ Corridor = 3, Z = 2150, Offset = 0, Size = 16, Drop = true },
+					{ Corridor = 1, Z = 3050, Offset = 60, Size = 22 },
+					{ Corridor = 2, Z = 2450, Offset = -80, Size = 18 },
+					{ X = 250, Z = 4400, Size = 26 },
+					{ X = -330, Z = 4950, Size = 20 },
+				},
+			},
+			-- Cave tunnel over the centre route
+			Cave = { Corridor = 2, FromZ = 3480, ToZ = 3570, Width = 34, Height = 22 },
+			-- Frozen waterfall on the right wall, with a frozen pool below
+			Waterfall = { X = 1050, Z = 3920, Height = 80, Width = 26 },
+			-- Distant low-poly mountains around the map (scale; the atmosphere hazes them).
+			-- Distance beyond the map edge; Height of the tallest peak in a massif; Sink = how
+			-- far below the course's profile the bases sit.
+			Panorama = {
+				Bands = {
+					{ Distance = { 700, 1300 }, Height = { 500, 900 }, Spacing = 1100, Sink = 700 },
+					{ Distance = { 2400, 3600 }, Height = { 1300, 2200 }, Spacing = 1500, Sink = 900 },
+				},
+			},
+		},
 	},
 }

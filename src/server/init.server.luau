@@ -10,13 +10,16 @@ local Services = script.Services
 local CourseService = require(Services.CourseService)
 local EquipmentService = require(Services.EquipmentService)
 local PlayerService = require(Services.PlayerService)
+local RaceService = require(Services.RaceService)
 
 PlayerService.Init({
 	CourseService = CourseService,
 	EquipmentService = EquipmentService,
+	RaceService = RaceService,
 })
 
 CourseService.Init()
+RaceService.Init()
 PlayerService.Start()
 
 if RunService:IsStudio() then
