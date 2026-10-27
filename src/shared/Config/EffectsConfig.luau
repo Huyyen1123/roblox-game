@@ -26,17 +26,17 @@ return {
 		StartTransparency = 0.05,
 		MinSpeed = 12,
 		-- Outside-edge spray while carving: particles/s per (stud/s of speed × |steer|)
-		CarvePerSpeed = 1.3,
+		CarvePerSpeed = 1.8,
 		-- Both edges while braking: particles/s per stud/s of speed
-		BrakePerSpeed = 1.1,
+		BrakePerSpeed = 1.5,
 		-- Light snow dust at speed even when running straight
-		CruisePerSpeed = 0.04,
-		MaxRate = 130,
+		CruisePerSpeed = 0.07,
+		MaxRate = 160,
 		LaunchAngle = 45, -- degrees above horizontal the spray is thrown
 		BackSweep = 35, -- degrees the spray is angled back from straight sideways
 		Speed = NumberRange.new(12, 24),
 		Lifetime = NumberRange.new(0.5, 1.0),
-		Size = { 0.3, 1.3 },
+		Size = { 0.45, 1.9 },
 		Gravity = 35,
 		Drag = 1.2,
 		-- Share of the rider's velocity the spray keeps, so it travels with the rider and

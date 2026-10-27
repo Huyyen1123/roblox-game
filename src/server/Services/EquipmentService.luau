@@ -248,7 +248,8 @@ local function headBounds(character: Model, head: BasePart): (Vector3, Vector3)
 	return low, high
 end
 
--- Helmet, goggles and backpack, welded to the head and upper torso so they follow the pose.
+-- Helmet, goggles, jacket, pants and backpack, welded to the body parts so they follow the
+-- pose.
 local function buildOutfit(character: Model, model: Model)
 	local outfit = SportConfig.Outfit
 	local head = character:FindFirstChild("Head") :: BasePart?
@@ -267,11 +268,44 @@ local function buildOutfit(character: Model, model: Model)
 		local lens = attach(head, model, "GoggleLens", Vector3.new(size.X * 0.8, size.Y * 0.11, 0.06), CFrame.new(center.X, goggleY, front - 0.08), outfit.LensColor)
 		lens.Reflectance = 0.25
 	end
+	-- Jacket and pants: a slightly larger box around each body part, welded to it
+	if outfit.Jacket then
+		local pad = outfit.ShellThickness * 2
+		local shells = {
+			UpperTorso = outfit.JacketColor,
+			LeftUpperArm = outfit.JacketColor,
+			RightUpperArm = outfit.JacketColor,
+			LeftLowerArm = outfit.JacketColor,
+			RightLowerArm = outfit.JacketColor,
+			LowerTorso = outfit.PantsColor,
+			LeftUpperLeg = outfit.PantsColor,
+			RightUpperLeg = outfit.PantsColor,
+			LeftLowerLeg = outfit.PantsColor,
+			RightLowerLeg = outfit.PantsColor,
+		}
+		for name, color in shells do
+			local bodyPart = character:FindFirstChild(name) :: BasePart?
+			if bodyPart then
+				attach(bodyPart, model, "Shell" .. name, bodyPart.Size + Vector3.new(pad, pad * 0.5, pad), CFrame.identity, color, Enum.Material.Fabric)
+			end
+		end
+		-- Dark cuffs where the sleeves end
+		for _, side in { "Left", "Right" } do
+			local lower = character:FindFirstChild(side .. "LowerArm") :: BasePart?
+			if lower then
+				local size = lower.Size
+				attach(lower, model, "Cuff", Vector3.new(size.X + pad * 1.4, 0.18, size.Z + pad * 1.4), CFrame.new(0, -size.Y / 2 + 0.09, 0), outfit.JacketTrimColor, Enum.Material.Fabric)
+			end
+		end
+	end
 	local torso = character:FindFirstChild("UpperTorso") :: BasePart?
 	if torso then
 		local size = torso.Size
-		local pack = attach(torso, model, "Backpack", Vector3.new(size.X * 0.7, size.Y * 0.8, 0.5), CFrame.new(0, -size.Y * 0.05, size.Z / 2 + 0.25), outfit.BackpackColor)
-		attach(pack, model, "BackpackLogo", Vector3.new(0.4, 0.3, 0.02), CFrame.new(0, 0.15, 0.26), outfit.BackpackAccentColor)
+		local pack = attach(torso, model, "Backpack", Vector3.new(size.X * 0.7, size.Y * 0.8, 0.5), CFrame.new(0, -size.Y * 0.05, size.Z / 2 + 0.25 + outfit.ShellThickness), outfit.BackpackColor)
+		-- An X across the back of the pack
+		for _, angle in { 0.7, -0.7 } do
+			attach(pack, model, "BackpackLogo", Vector3.new(0.12, size.Y * 0.6, 0.03), CFrame.new(0, 0, 0.26) * CFrame.Angles(0, 0, angle), outfit.BackpackAccentColor)
+		end
 	end
 end
 

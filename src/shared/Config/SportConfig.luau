@@ -81,7 +81,14 @@ local Outfit = {
 	LensColor = Color3.fromRGB(120, 95, 255),
 	GoggleFrameColor = Color3.fromRGB(20, 20, 24),
 	BackpackColor = Color3.fromRGB(32, 34, 40),
-	BackpackAccentColor = Color3.fromRGB(230, 230, 235),
+	BackpackAccentColor = Color3.fromRGB(240, 120, 40), -- the X across the backpack
+	-- Winter shell over the avatar (blocky jacket and pants on each limb, so it follows
+	-- every pose). Bright colours keep the rider readable against snow and shadow.
+	Jacket = true,
+	JacketColor = Color3.fromRGB(38, 84, 196),
+	JacketTrimColor = Color3.fromRGB(24, 30, 44),
+	PantsColor = Color3.fromRGB(214, 150, 70),
+	ShellThickness = 0.07, -- studs added around each body part
 }
 
 local SportConfig = {
