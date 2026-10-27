@@ -252,6 +252,17 @@ function FreerideHeightfield:InLake(x: number, z: number): boolean
 	return dx * dx + dz * dz < 1
 end
 
+-- 0 inside the playable area, rising to 1 across the mountain range around it
+function FreerideHeightfield:RangeMask(x: number, z: number): number
+	local range = self.World.Range
+	if not range then
+		return 0
+	end
+	local dx = math.max(math.abs(x) - range.InnerX, 0)
+	local dz = math.max(range.InnerUphill - z, 0) + math.max(z - range.InnerDownhill, 0)
+	return smoothstep(range.Fade[1], range.Fade[2], math.sqrt(dx * dx + dz * dz))
+end
+
 -- The mountain without features
 function FreerideHeightfield:BaseHeight(x: number, z: number): number
 	local world = self.World
@@ -288,8 +299,25 @@ function FreerideHeightfield:BaseHeight(x: number, z: number): number
 	local walls = world.Walls
 	local beyond = ax - walls.StartX
 	if beyond > 0 then
-		height += walls.Rise * beyond * beyond / (beyond + walls.Knee)
-			+ fbm(x / 70, z / 70, seed + 90, 3) * 18 * smoothstep(0, 120, beyond)
+		local rise = walls.Rise * beyond * beyond / (beyond + walls.Knee)
+		if walls.MaxRise then
+			-- The wall levels off into the foot of the mountain range beyond it
+			rise = walls.MaxRise * (1 - math.exp(-rise / walls.MaxRise))
+		end
+		height += rise + fbm(x / 70, z / 70, seed + 90, 3) * 18 * smoothstep(0, 120, beyond)
+	end
+
+	-- Mountain range all around the playable area: ridged noise gives sharp ridgelines and
+	-- peaks; slope decides snow or rock, so steep faces come out rocky
+	local range = world.Range
+	if range then
+		local mask = self:RangeMask(x, z)
+		if mask > 0 then
+			local ridge = 1 - math.abs(valueNoise(x / range.PeakScale, z / range.PeakScale, seed + 300))
+			local ridge2 = 1 - math.abs(valueNoise(x / range.RidgeScale, z / range.RidgeScale, seed + 310))
+			height += mask
+				* (range.Base + ridge ^ range.PeakSharpness * range.PeakHeight + ridge2 ^ 2 * range.RidgeHeight + fbm(x / 90, z / 90, seed + 320, 2) * 30)
+		end
 	end
 
 	-- Natural relief, calm around the start and finish
@@ -333,10 +361,13 @@ function FreerideHeightfield:ChooseMaterial(x: number, z: number, _height: numbe
 		return Enum.Material.Glacier
 	end
 	local patch = valueNoise(x / materials.PatchScale, z / materials.PatchScale, self.Seed + 60) * 0.12
-	if slope + patch < materials.RockSlope then
+	-- Snow clings to steeper faces on the surrounding range (mostly white peaks, rock ribs)
+	local rockSlope = materials.RockSlope + (materials.RangeSnowBonus or 0) * self:RangeMask(x, z)
+	if slope + patch < rockSlope then
 		return Enum.Material.Snow
 	end
-	return if slope > materials.SlateSlope then Enum.Material.Slate else Enum.Material.Rock
+	-- Dark slate only on the sheerest faces (further up on the range, where snow holds longer)
+	return if slope > materials.SlateSlope + (rockSlope - materials.RockSlope) then Enum.Material.Slate else Enum.Material.Rock
 end
 
 -- World positions (on the snow) of a race checkpoint's beams: Beams = X positions,
@@ -364,6 +395,16 @@ end
 -- Local-space bounds of the generated terrain: minX, maxX, minZ, maxZ.
 function FreerideHeightfield:GetBounds(): (number, number, number, number)
 	local bounds = self.World.Bounds
+	return -bounds.HalfWidth, bounds.HalfWidth, -bounds.Uphill, bounds.Downhill
+end
+
+-- Bounds of the terrain to bake: the playable area plus the mountain range around it
+function FreerideHeightfield:GetTerrainBounds(): (number, number, number, number)
+	local range = self.World.Range
+	if not range then
+		return self:GetBounds()
+	end
+	local bounds = range.Bounds
 	return -bounds.HalfWidth, bounds.HalfWidth, -bounds.Uphill, bounds.Downhill
 end
 

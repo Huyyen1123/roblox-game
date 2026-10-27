@@ -12,13 +12,13 @@
 
 return {
 	Lighting = {
-		ClockTime = 14.9,
+		ClockTime = 15.7,
 		GeographicLatitude = 38,
 		Brightness = 3.2,
 		ExposureCompensation = -0.55,
 		Ambient = Color3.fromRGB(40, 50, 76),
 		OutdoorAmbient = Color3.fromRGB(118, 134, 170),
-		ColorShift_Top = Color3.fromRGB(255, 232, 200),
+		ColorShift_Top = Color3.fromRGB(255, 224, 182),
 		ColorShift_Bottom = Color3.fromRGB(150, 170, 205),
 		EnvironmentDiffuseScale = 0.6,
 		EnvironmentSpecularScale = 0.3,
@@ -29,8 +29,8 @@ return {
 	-- Haze is tuned with the skybox: thick enough to hide the seam where the painted
 	-- mountains meet the horizon, thin enough that their peaks rise clearly out of the mist.
 	Atmosphere = {
-		Density = 0.32,
-		Offset = 0.12,
+		Density = 0.36,
+		Offset = 0.2,
 		Color = Color3.fromRGB(188, 210, 242),
 		Decay = Color3.fromRGB(104, 132, 186),
 		Glare = 0.5,
@@ -58,6 +58,9 @@ return {
 	-- sunlit snow keeps its shading.
 	TerrainColors = {
 		[Enum.Material.Snow] = Color3.fromRGB(228, 236, 248),
+		-- Lighter, warmer rock so cliff faces read grey-brown in sun and shadow
+		[Enum.Material.Rock] = Color3.fromRGB(150, 140, 134),
+		[Enum.Material.Slate] = Color3.fromRGB(128, 124, 128),
 	},
 
 	Bloom = {
@@ -67,7 +70,7 @@ return {
 	},
 
 	SunRays = {
-		Intensity = 0.05,
+		Intensity = 0.1,
 		Spread = 0.55,
 	},
 

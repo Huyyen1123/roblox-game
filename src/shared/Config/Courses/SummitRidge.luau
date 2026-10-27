@@ -59,7 +59,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 4,
+		TerrainVersion = 7,
 		-- Per-course bake marker on Workspace.Terrain (several courses share one Terrain)
 		BakeAttribute = "CourseTerrain_SummitRidge",
 
@@ -98,7 +98,23 @@ return {
 
 		-- Rounded overall bowl shape and the steep rocky walls that bound the map
 		Bowl = { Curvature = 0.00004 },
-		Walls = { StartX = 1060, Rise = 0.95, Knee = 60 },
+		Walls = { StartX = 1060, Rise = 0.95, Knee = 60, MaxRise = 300 },
+
+		-- Mountain range around the playable area (terrain, baked with the course). Inner box
+		-- = the area it leaves alone; Fade = distance outside it over which the range grows.
+		Range = {
+			Bounds = { HalfWidth = 3300, Uphill = 2300, Downhill = 8100 },
+			InnerX = 1150,
+			InnerUphill = -380,
+			InnerDownhill = 5800,
+			Fade = { 60, 700 },
+			Base = 160,
+			PeakScale = 900, -- spacing of the main peaks
+			PeakHeight = 850,
+			PeakSharpness = 2, -- higher = narrower, sharper peaks
+			RidgeScale = 260, -- secondary ridges and spurs
+			RidgeHeight = 220,
+		},
 
 		-- Natural relief, in studs. Noise fades out around the start and finish so they stay clean.
 		Relief = {
@@ -111,7 +127,7 @@ return {
 		},
 
 		-- Snow everywhere; rock only where it's too steep to hold snow (> ~45°)
-		Materials = { RockSlope = 1.0, SlateSlope = 1.35, PatchScale = 26 },
+		Materials = { RockSlope = 1.0, SlateSlope = 1.35, PatchScale = 26, RangeSnowBonus = 0.9 },
 
 		-- Shaped into the terrain (FreerideHeightfield). Kickers: X, or Corridor (+ Offset);
 		-- Z is the lip; Height above the slope; Length of the ramp; Width. The lip angle above
@@ -166,6 +182,11 @@ return {
 			Rocks = {
 				RidgeSpacing = 230, -- clusters along the ridgelines between corridors
 				WallSpacing = 70, -- cliff columns along the boundary walls
+				-- Formations lining the routes: every RouteSpacing studs each side of each
+				-- corridor has this chance of a cluster, RouteOffset studs from its centre
+				RouteSpacing = 260,
+				RouteChance = 0.55,
+				RouteOffset = { 75, 150 },
 				WallX = 1095,
 				-- A narrow rock passage across the right corridor (gap at its centre)
 				Passage = { Corridor = 3, Z = 2650, Gap = 34, Depth = 70 },
@@ -186,9 +207,9 @@ return {
 			-- Distance beyond the map edge; Height of the tallest peak in a massif; Sink = how
 			-- far below the course's profile the bases sit.
 			Panorama = {
+				-- Beyond the terrain mountain range: the far horizon
 				Bands = {
-					{ Distance = { 700, 1300 }, Height = { 500, 900 }, Spacing = 1100, Sink = 700 },
-					{ Distance = { 2400, 3600 }, Height = { 1300, 2200 }, Spacing = 1500, Sink = 900 },
+					{ Distance = { 2700, 3900 }, Height = { 1400, 2300 }, Spacing = 1500, Sink = 700 },
 				},
 			},
 		},

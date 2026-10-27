@@ -32,7 +32,7 @@ local MountainBuilder = {}
 local ROCK_COLORS = { Color3.fromRGB(156, 138, 120), Color3.fromRGB(140, 126, 112), Color3.fromRGB(168, 152, 132) }
 local SLATE_COLOR = Color3.fromRGB(118, 112, 112)
 local SNOW_COLOR = Color3.fromRGB(242, 247, 255)
-local NEEDLE_COLORS = { Color3.fromRGB(30, 70, 50), Color3.fromRGB(40, 84, 58) }
+local NEEDLE_COLORS = { Color3.fromRGB(26, 62, 44), Color3.fromRGB(34, 76, 52) }
 local TRUNK_COLOR = Color3.fromRGB(86, 60, 44)
 local ICE_COLOR = Color3.fromRGB(176, 220, 244)
 local BEAM_COLOR = Color3.fromRGB(255, 122, 40)
@@ -62,9 +62,9 @@ end
 
 local QUADRANTS = { CFrame.Angles(0, 0, 0), CFrame.Angles(0, math.pi / 2, 0), CFrame.Angles(0, math.pi, 0), CFrame.Angles(0, math.pi * 3 / 2, 0) }
 
--- Four corner wedges sharing an apex: a square pyramid
-local function pyramid(parts, apex: Vector3, height: number, extent: number, yaw: number, color: Color3, material: Enum.Material)
-	local frame = CFrame.new(apex) * CFrame.Angles(0, yaw, 0)
+-- Four corner wedges sharing an apex (frame = apex position and orientation): a square
+-- pyramid hanging below the apex
+local function pyramid(parts, frame: CFrame, height: number, extent: number, color: Color3, material: Enum.Material)
 	for _, quadrant in QUADRANTS do
 		table.insert(parts, part({
 			Size = Vector3.new(extent, height, extent),
@@ -75,22 +75,29 @@ local function pyramid(parts, apex: Vector3, height: number, extent: number, yaw
 	end
 end
 
--- Tree shapes for a unit-height tree. Tiers: { base, height, half-width }; Cover: share of
--- each tier the snow layer covers; Trunk: trunk width.
+-- Tree shapes for a unit-height tree. Tiers: { base, height, half-width }, bottom to top;
+-- Cover: share of each tier the snow layers cover; Trunk: trunk width.
 local TREE_VARIANTS = {
 	Tall = {
-		Tiers = { { 0.14, 0.32, 0.4 }, { 0.31, 0.29, 0.33 }, { 0.47, 0.27, 0.26 }, { 0.63, 0.23, 0.19 }, { 0.79, 0.21, 0.12 } },
-		Cover = 0.86,
+		Tiers = {
+			{ 0.12, 0.3, 0.42 },
+			{ 0.26, 0.28, 0.37 },
+			{ 0.4, 0.26, 0.31 },
+			{ 0.53, 0.24, 0.25 },
+			{ 0.66, 0.22, 0.19 },
+			{ 0.78, 0.22, 0.12 },
+		},
+		Cover = 0.88,
 		Trunk = 0.07,
 	},
 	Wide = {
-		Tiers = { { 0.1, 0.42, 0.6 }, { 0.36, 0.36, 0.45 }, { 0.6, 0.4, 0.3 } },
+		Tiers = { { 0.08, 0.36, 0.62 }, { 0.28, 0.33, 0.5 }, { 0.47, 0.3, 0.38 }, { 0.64, 0.36, 0.24 } },
 		Cover = 0.9,
 		Trunk = 0.09,
 	},
 	Heavy = {
-		Tiers = { { 0.12, 0.36, 0.46 }, { 0.36, 0.33, 0.36 }, { 0.58, 0.42, 0.26 } },
-		Cover = 0.98,
+		Tiers = { { 0.1, 0.34, 0.48 }, { 0.3, 0.32, 0.4 }, { 0.48, 0.3, 0.3 }, { 0.65, 0.35, 0.2 } },
+		Cover = 0.99,
 		Trunk = 0.08,
 	},
 	Sparse = {
@@ -101,9 +108,11 @@ local TREE_VARIANTS = {
 }
 
 -- Builds one variant as a single union (unit height, base at y = 0). Each tier is two
--- needle pyramids 45° apart (an eight-pointed skirt) with a snow pyramid at the angle in
--- between, so green tips show around patches of snow.
-local function buildTreeUnion(shape): BasePart?
+-- needle pyramids 45° apart (an eight-pointed skirt), tilted a few degrees so the silhouette
+-- is irregular, with two snow layers resting on it at the angles in between, so dark green
+-- tips show around blankets of snow.
+local function buildTreeUnion(name: string, shape): BasePart?
+	local random = Random.new(#name * 97 + #shape.Tiers)
 	local parts = {}
 	table.insert(parts, part({
 		Size = Vector3.new(shape.Trunk, 0.24, shape.Trunk),
@@ -112,11 +121,16 @@ local function buildTreeUnion(shape): BasePart?
 		Material = Enum.Material.Wood,
 	}))
 	for i, tier in shape.Tiers do
-		local apex = Vector3.new(0, tier[1] + tier[2], 0)
 		local yaw = i * 0.37
-		pyramid(parts, apex, tier[2], tier[3], yaw, NEEDLE_COLORS[i % 2 + 1], Enum.Material.SmoothPlastic)
-		pyramid(parts, apex, tier[2], tier[3], yaw + math.pi / 4, NEEDLE_COLORS[(i + 1) % 2 + 1], Enum.Material.SmoothPlastic)
-		pyramid(parts, apex + Vector3.new(0, tier[2] * 0.07, 0), tier[2] * shape.Cover, tier[3] * shape.Cover * 0.97, yaw + math.pi / 8, SNOW_COLOR, Enum.Material.Snow)
+		local tilt = CFrame.Angles(random:NextNumber(-0.09, 0.09), 0, random:NextNumber(-0.09, 0.09))
+		local apex = CFrame.new(random:NextNumber(-0.01, 0.01), tier[1] + tier[2], random:NextNumber(-0.01, 0.01)) * tilt
+		pyramid(parts, apex * CFrame.Angles(0, yaw, 0), tier[2], tier[3], NEEDLE_COLORS[i % 2 + 1], Enum.Material.SmoothPlastic)
+		pyramid(parts, apex * CFrame.Angles(0, yaw + math.pi / 4, 0), tier[2], tier[3], NEEDLE_COLORS[(i + 1) % 2 + 1], Enum.Material.SmoothPlastic)
+		local lift = CFrame.new(0, tier[2] * 0.07, 0)
+		for k, offset in { math.pi / 8, math.pi * 3 / 8 } do
+			local cover = shape.Cover * (if k == 1 then 0.97 else 0.88)
+			pyramid(parts, apex * lift * CFrame.Angles(0, yaw + offset, 0), tier[2] * cover, tier[3] * cover, SNOW_COLOR, Enum.Material.Snow)
+		end
 	end
 	local first = table.remove(parts, 1)
 	local ok, result = pcall(function()
@@ -147,7 +161,7 @@ end
 local function treeTemplates()
 	local templates = {}
 	for name, shape in TREE_VARIANTS do
-		local union = buildTreeUnion(shape)
+		local union = buildTreeUnion(name, shape)
 		if union then
 			templates[name] = union
 		end
@@ -251,6 +265,29 @@ local function buildRocks(ctx)
 			local mid = (hf:CorridorCenter(i, pz) + hf:CorridorCenter(i + 1, pz)) / 2
 			if random:NextNumber() < 0.8 then
 				rockCluster(ctx, folder, mid + random:NextNumber(-40, 40), pz, random:NextNumber(10, 22))
+			end
+		end
+	end
+
+	-- Rock formations lining the routes (beside the lanes, never in them or near jumps)
+	local function nearKicker(x: number, z: number): boolean
+		for _, kicker in hf.Kickers do
+			if math.abs(x - kicker.X) < kicker.Width / 2 + 40 and z > kicker.Z - kicker.Length - 60 and z < kicker.Z + 180 then
+				return true
+			end
+		end
+		return false
+	end
+	for z = corridors.StartZ + 120, corridors.EndZ - 120, settings.RouteSpacing do
+		for i = 1, 3 do
+			for _, side in { -1, 1 } do
+				if random:NextNumber() < settings.RouteChance then
+					local pz = z + random:NextNumber(-80, 80)
+					local x = hf:CorridorCenter(i, pz) + side * random:NextNumber(settings.RouteOffset[1], settings.RouteOffset[2])
+					if not nearKicker(x, pz) and math.abs(x) < hf.World.Walls.StartX - 40 then
+						rockCluster(ctx, folder, x, pz, random:NextNumber(16, 32), { MinHeight = 0.8, MaxHeight = 1.7, Tilt = 8 })
+					end
+				end
 			end
 		end
 	end
@@ -643,7 +680,7 @@ local function buildForest(ctx)
 
 	local function blocked(x: number, z: number): boolean
 		-- Start and finish areas, the lake
-		if math.sqrt(x * x + z * z) < 200 or math.sqrt(x * x + (z - course.Finish.Z) ^ 2) < 260 then
+		if math.sqrt(x * x + z * z) < 110 or math.sqrt(x * x + (z - course.Finish.Z) ^ 2) < 260 then
 			return true
 		end
 		local lake = hf.Lake

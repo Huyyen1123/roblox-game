@@ -22,8 +22,8 @@ local MATERIAL_COLORS = {
 	[Enum.Material.Snow] = Color3.fromRGB(228, 236, 248), -- powder (EnvironmentConfig.TerrainColors)
 	[Enum.Material.Salt] = Color3.fromRGB(234, 240, 249), -- groomed: smooth, bright
 	[Enum.Material.Limestone] = Color3.fromRGB(232, 239, 249), -- wind-packed band
-	[Enum.Material.Rock] = Color3.fromRGB(112, 116, 126),
-	[Enum.Material.Slate] = Color3.fromRGB(120, 124, 134),
+	[Enum.Material.Rock] = Color3.fromRGB(150, 140, 134),
+	[Enum.Material.Slate] = Color3.fromRGB(128, 124, 128),
 	[Enum.Material.Glacier] = Color3.fromRGB(168, 205, 230),
 }
 
@@ -223,10 +223,10 @@ end
 function TerrainBuilder.ClearArea(heightfield)
 	local terrain = Workspace.Terrain
 	local origin = heightfield.Course.Origin
-	local minX, maxX, minZ, maxZ = heightfield:GetBounds()
-	-- From below the lowest ground to well above the highest (the start is near the top)
+	local minX, maxX, minZ, maxZ = (heightfield.GetTerrainBounds or heightfield.GetBounds)(heightfield)
+	-- From below the lowest ground to well above the highest (mountain ranges included)
 	local y0 = alignDown(origin.Y + heightfield.MinY - 64)
-	local y1 = alignUp(origin.Y + heightfield.Course.StartY + 900)
+	local y1 = alignUp(origin.Y + heightfield.Course.StartY + 2600)
 	local step = 256
 	for x = alignDown(origin.X + minX), alignUp(origin.X + maxX) - 1, step do
 		for z = alignDown(origin.Z + minZ), alignUp(origin.Z + maxZ) - 1, step do
@@ -246,7 +246,7 @@ function TerrainBuilder.Build(heightfield)
 		terrain:SetMaterialColor(material, color)
 	end
 
-	local minX, maxX, minZ, maxZ = heightfield:GetBounds()
+	local minX, maxX, minZ, maxZ = (heightfield.GetTerrainBounds or heightfield.GetBounds)(heightfield)
 	local x0 = alignDown(origin.X + minX)
 	local x1 = alignUp(origin.X + maxX)
 	local z0 = alignDown(origin.Z + minZ)
