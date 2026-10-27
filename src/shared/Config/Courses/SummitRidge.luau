@@ -59,7 +59,7 @@ return {
 	},
 
 	World = {
-		TerrainVersion = 7,
+		TerrainVersion = 8,
 		-- Per-course bake marker on Workspace.Terrain (several courses share one Terrain)
 		BakeAttribute = "CourseTerrain_SummitRidge",
 
@@ -123,6 +123,9 @@ return {
 			WindRidges = { ScaleX = 38, ScaleZ = 150, Amplitude = 2.2 }, -- along the fall line
 			Drifts = { Scale = 30, Amplitude = 2.6 }, -- rounded mounds only (no pits)
 			Snowbank = { Height = 3.5, Width = 26 }, -- along the foot of the walls
+			-- Off the marked lanes: soft powder pillows and smaller lumps (fade in between
+			-- LaneClear studs from a lane's centre)
+			Lumps = { LaneClear = { 55, 110 }, PillowScale = 55, PillowHeight = 5, LumpScale = 22, LumpHeight = 0.9 },
 			CleanRadius = 170, -- calm ground around the start and finish
 		},
 
@@ -171,8 +174,9 @@ return {
 				},
 				-- Kept clear: fast lanes and feature run-ins (corridor, half width)
 				ClearLanes = {
+					{ Corridor = 1, HalfWidth = 36 },
 					{ Corridor = 2, HalfWidth = 46 },
-					{ Corridor = 3, HalfWidth = 30 },
+					{ Corridor = 3, HalfWidth = 32 },
 				},
 				ClearRadius = 70, -- around kickers, checkpoint beams, the cave and the start/finish
 				ParkLane = { X = -760, HalfWidth = 70, FromZ = 150, ToZ = 1150 },
@@ -198,6 +202,22 @@ return {
 					{ X = 250, Z = 4400, Size = 26 },
 					{ X = -330, Z = 4950, Size = 20 },
 				},
+			},
+			-- Marked routes (piste poles each side of the lane, joined by a rope), coloured by
+			-- difficulty like a real mountain. Split: Z range where a route leaves the middle
+			-- for its corridor; Merge: Z range where it comes back for the big air and finish.
+			-- Through = keep marking down to the finish (one route only, after they merge).
+			Routes = {
+				FromZ = 120,
+				Spacing = 24,
+				PoleHeight = 5,
+				RopeHeight = 1.4,
+				List = {
+					{ Label = "EASY", Corridor = 1, HalfWidth = 40, Color = Color3.fromRGB(40, 110, 230), Split = { 150, 950 }, Merge = { 4300, 4560 } },
+					{ Label = "FAST", Corridor = 2, HalfWidth = 44, Color = Color3.fromRGB(220, 45, 45), Split = { 150, 950 }, Merge = { 4300, 4560 }, Through = true },
+					{ Label = "EXPERT", Corridor = 3, HalfWidth = 34, Color = Color3.fromRGB(28, 28, 32), Split = { 150, 950 }, Merge = { 4300, 4560 } },
+				},
+				Sign = { X = 0, Z = 110 },
 			},
 			-- Cave tunnel over the centre route
 			Cave = { Corridor = 2, FromZ = 3480, ToZ = 3570, Width = 34, Height = 22 },

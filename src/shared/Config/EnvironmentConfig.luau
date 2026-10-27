@@ -14,7 +14,7 @@ return {
 	Lighting = {
 		ClockTime = 15.7,
 		GeographicLatitude = 38,
-		Brightness = 3.2,
+		Brightness = 2.9,
 		ExposureCompensation = -0.55,
 		Ambient = Color3.fromRGB(40, 50, 76),
 		OutdoorAmbient = Color3.fromRGB(118, 134, 170),
@@ -49,7 +49,7 @@ return {
 
 	ColorCorrection = {
 		Brightness = 0,
-		Contrast = 0.22,
+		Contrast = 0.26,
 		Saturation = 0.14,
 		TintColor = Color3.fromRGB(255, 251, 246),
 	},

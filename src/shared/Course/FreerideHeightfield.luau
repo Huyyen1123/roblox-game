@@ -252,6 +252,32 @@ function FreerideHeightfield:InLake(x: number, z: number): boolean
 	return dx * dx + dz * dz < 1
 end
 
+-- Centre line of a marked route (World.Scenery.Routes) at z: from the start out to its
+-- corridor, along the corridor, then back to the middle for the big air and the finish
+function FreerideHeightfield:RouteX(route, z: number): number
+	local corridors = self.World.Corridors
+	if z < corridors.StartZ then
+		return self:CorridorCenter(route.Corridor, z) * smoothstep(route.Split[1], route.Split[2], z)
+	elseif z <= corridors.EndZ then
+		return self:CorridorCenter(route.Corridor, z)
+	end
+	return self:CorridorCenter(route.Corridor, corridors.EndZ) * (1 - smoothstep(route.Merge[1], route.Merge[2], z))
+end
+
+-- Distance (studs) from x to the nearest marked route lane's centre at z
+function FreerideHeightfield:RouteDistance(x: number, z: number): number
+	local scenery = self.World.Scenery
+	local routes = scenery and scenery.Routes
+	if not routes then
+		return math.huge
+	end
+	local nearest = math.huge
+	for _, route in routes.List do
+		nearest = math.min(nearest, math.abs(x - self:RouteX(route, z)))
+	end
+	return nearest
+end
+
 -- 0 inside the playable area, rising to 1 across the mountain range around it
 function FreerideHeightfield:RangeMask(x: number, z: number): number
 	local range = self.World.Range
@@ -333,6 +359,18 @@ function FreerideHeightfield:BaseHeight(x: number, z: number): number
 	height += drift ^ 1.5 * relief.Drifts.Amplitude * 2 * calm
 	local bank = (ax - walls.StartX) / relief.Snowbank.Width
 	height += relief.Snowbank.Height * math.exp(-bank * bank)
+
+	-- Off-piste powder: soft pillows and lumps that catch the light, kept off the marked
+	-- lanes so riding them stays smooth
+	local lumps = relief.Lumps
+	if lumps then
+		local offPiste = smoothstep(lumps.LaneClear[1], lumps.LaneClear[2], self:RouteDistance(x, z)) * calm
+		if offPiste > 0 then
+			local pillow = math.max(fbm(x / lumps.PillowScale, z / lumps.PillowScale, seed + 400, 2), 0)
+			local lump = fbm(x / lumps.LumpScale, z / lumps.LumpScale, seed + 410, 2)
+			height += offPiste * (pillow ^ 1.3 * lumps.PillowHeight + lump * lumps.LumpHeight)
+		end
+	end
 
 	return height
 end

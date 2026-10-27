@@ -149,6 +149,9 @@ local function buildTreeUnion(name: string, shape): BasePart?
 		return nil
 	end
 	local union = result[1]
+	-- The union's centre isn't the middle of the tree: remember where it sits relative to the
+	-- trunk base (the origin of the unit tree), so placed trees stand exactly on the ground
+	union:SetAttribute("BaseOffset", union.Position)
 	union.UsePartColor = false
 	union.Anchored = true
 	union.CanCollide = false
@@ -655,6 +658,158 @@ local function buildMarkers(ctx)
 end
 
 ----------------------------------------------------------------------------------------------
+-- Route markers
+----------------------------------------------------------------------------------------------
+
+local function routeX(hf, route, z: number): number
+	return hf:RouteX(route, z)
+end
+
+-- Piste markers: a pole each side of every route lane (coloured by difficulty, like a real
+-- mountain), joined by a low rope, so the way down reads without the map; plus a signpost
+-- where the routes split. Gaps are left at jumps, the cave and other features.
+local function buildRoutes(ctx)
+	local hf = ctx.HF
+	local settings = ctx.Scenery.Routes
+	if not settings then
+		return
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "Routes"
+	folder.Parent = ctx.Folder
+	local origin = ctx.Origin
+	local course = hf.Course
+	local cave = ctx.Scenery.Cave
+	local passage = ctx.Scenery.Rocks.Passage
+
+	local function skip(route, x: number, z: number): boolean
+		for _, kicker in hf.Kickers do
+			if math.abs(x - kicker.X) < kicker.Width / 2 + 12 and z > kicker.Z - kicker.Length - 12 and z < kicker.Z + 30 then
+				return true
+			end
+		end
+		if cave and route.Corridor == cave.Corridor and z > cave.FromZ - 12 and z < cave.ToZ + 12 then
+			return true
+		end
+		if passage and route.Corridor == passage.Corridor and math.abs(z - passage.Z) < passage.Depth / 2 + 10 then
+			return true
+		end
+		return hf:InLake(x, z)
+	end
+
+	local function groundAt(x: number, z: number): Vector3
+		local p = origin + Vector3.new(x, hf:GetHeight(x, z), z)
+		local hit = workspace:Raycast(p + Vector3.yAxis * 12, Vector3.yAxis * -30, ctx.TerrainRay)
+		return if hit then hit.Position else p
+	end
+
+	for _, route in settings.List do
+		local previous = { [-1] = nil, [1] = nil }
+		local toZ = if route.Through then course.Race.FinishZ - 60 else route.Merge[2]
+		for z = settings.FromZ, toZ, settings.Spacing do
+			local center = routeX(hf, route, z)
+			for _, side in { -1, 1 } do
+				local x = center + side * route.HalfWidth
+				if skip(route, x, z) then
+					previous[side] = nil
+					continue
+				end
+				local base = groundAt(x, z)
+				part({
+					Name = "Pole",
+					Size = Vector3.new(0.35, settings.PoleHeight, 0.35),
+					CFrame = CFrame.new(base + Vector3.new(0, settings.PoleHeight / 2 - 0.5, 0)),
+					Color = route.Color,
+					Material = Enum.Material.SmoothPlastic,
+					CanCollide = false,
+					CanQuery = false,
+					CanTouch = false,
+					Parent = folder,
+				})
+				part({
+					Name = "Tip",
+					Size = Vector3.new(0.42, 0.7, 0.42),
+					CFrame = CFrame.new(base + Vector3.new(0, settings.PoleHeight - 0.2, 0)),
+					Color = Color3.fromRGB(255, 130, 40),
+					Material = Enum.Material.Neon,
+					CanCollide = false,
+					CanQuery = false,
+					CanTouch = false,
+					CastShadow = false,
+					Parent = folder,
+				})
+				-- Rope to the previous pole on this side
+				local rope = base + Vector3.new(0, settings.RopeHeight, 0)
+				local last = previous[side]
+				if last and (rope - last).Magnitude < settings.Spacing * 1.6 then
+					local mid = (rope + last) / 2
+					part({
+						Name = "Rope",
+						Size = Vector3.new(0.12, 0.12, (rope - last).Magnitude),
+						CFrame = CFrame.lookAt(mid, rope),
+						Color = route.Color,
+						Material = Enum.Material.Fabric,
+						CanCollide = false,
+						CanQuery = false,
+						CanTouch = false,
+						CastShadow = false,
+						Parent = folder,
+					})
+				end
+				previous[side] = rope
+			end
+			maybeYield()
+		end
+	end
+
+	-- Signpost where the routes split: one arm per route, pointing its way
+	local sign = settings.Sign
+	if sign then
+		local base = groundAt(sign.X, sign.Z)
+		part({
+			Name = "SignPost",
+			Size = Vector3.new(0.8, 12, 0.8),
+			CFrame = CFrame.new(base + Vector3.new(0, 5.5, 0)),
+			Color = Color3.fromRGB(70, 52, 40),
+			Material = Enum.Material.Wood,
+			CanCollide = false,
+			CanTouch = false,
+			Parent = folder,
+		})
+		for index, route in settings.List do
+			local target = Vector3.new(routeX(hf, route, sign.Z + 600) - sign.X, 0, 600).Unit
+			local arm = part({
+				Name = "SignArm",
+				Size = Vector3.new(9, 2, 0.4),
+				CFrame = CFrame.new(base + Vector3.new(0, 11 - index * 2.4, 0)) * CFrame.lookAt(Vector3.zero, Vector3.new(target.Z, 0, -target.X)) * CFrame.new(4, 0, 0),
+				Color = route.Color,
+				Material = Enum.Material.SmoothPlastic,
+				CanCollide = false,
+				CanQuery = false,
+				CanTouch = false,
+				Parent = folder,
+			})
+			for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+				local gui = Instance.new("SurfaceGui")
+				gui.Face = face
+				gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+				gui.PixelsPerStud = 30
+				gui.LightInfluence = 0
+				local text = Instance.new("TextLabel")
+				text.Size = UDim2.fromScale(1, 1)
+				text.BackgroundTransparency = 1
+				text.Text = route.Label
+				text.TextScaled = true
+				text.Font = Enum.Font.GothamBlack
+				text.TextColor3 = Color3.new(1, 1, 1)
+				text.Parent = gui
+				gui.Parent = arm
+			end
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------
 -- Forest
 ----------------------------------------------------------------------------------------------
 
@@ -698,6 +853,15 @@ local function buildForest(ctx)
 		for _, kicker in hf.Kickers do
 			if math.abs(x - kicker.X) < kicker.Width / 2 + 25 and z > kicker.Z - kicker.Length - 40 and z < kicker.Z + 160 then
 				return true
+			end
+		end
+		-- Marked routes stay open (pole lines run along their edges)
+		local routes = ctx.Scenery.Routes
+		if routes then
+			for _, route in routes.List do
+				if z > routes.FromZ - 20 and math.abs(x - routeX(hf, route, z)) < route.HalfWidth + 5 then
+					return true
+				end
 			end
 		end
 		-- Fast lanes stay open
@@ -767,7 +931,12 @@ local function buildForest(ctx)
 			local near = nearest < settings.ColliderDistance or inSection
 
 			-- Variant: sparse pines high on the ridgelines, otherwise a mix
+			-- The baked snow surface (can sit a little off the heightfield's value)
 			local ground = ctx.Origin + Vector3.new(px, hf:GetHeight(px, pz), pz)
+			local surface = workspace:Raycast(ground + Vector3.yAxis * 12, Vector3.yAxis * -30, ctx.TerrainRay)
+			if surface then
+				ground = surface.Position
+			end
 			local pick = random:NextNumber()
 			local variant, height
 			local onRidge = hf:CorridorEnvelope(pz) > 0.3 and nearest > 220
@@ -789,8 +958,14 @@ local function buildForest(ctx)
 			if templates then
 				local template = templates[variant] or templates.Tall
 				tree = template:Clone()
-				tree.Size = Vector3.new(template.Size.X * height * widthScale, template.Size.Y * height, template.Size.Z * height * widthScale)
-				tree.CFrame = CFrame.new(ground + Vector3.new(0, tree.Size.Y / 2 - 0.8, 0)) * CFrame.Angles(0, yaw, 0)
+				local scale = Vector3.new(height * widthScale, height, height * widthScale)
+				tree.Size = template.Size * scale
+				-- Trunk base on the snow, sunk a little more on slopes so the downhill side of
+				-- the trunk never shows a gap
+				local sink = 0.6 + hf:GetSlope(px, pz) * 2.5
+				local rotation = CFrame.Angles(0, yaw, 0)
+				local offset = template:GetAttribute("BaseOffset") * scale
+				tree.CFrame = CFrame.new(ground - Vector3.yAxis * sink) * rotation * CFrame.new(offset)
 				tree.CastShadow = near
 				tree.Name = variant
 			elseif spruce then
@@ -936,6 +1111,10 @@ end
 
 ----------------------------------------------------------------------------------------------
 
+local terrainRay = RaycastParams.new()
+terrainRay.FilterType = Enum.RaycastFilterType.Include
+terrainRay.FilterDescendantsInstances = { workspace.Terrain }
+
 function MountainBuilder.Build(heightfield, courseFolder: Instance)
 	local course = heightfield.Course
 	local scenery = heightfield.World.Scenery
@@ -954,12 +1133,14 @@ function MountainBuilder.Build(heightfield, courseFolder: Instance)
 		Height = function(x: number, z: number): number
 			return heightfield:GetHeight(x, z)
 		end,
+		TerrainRay = terrainRay,
 	}
 	buildPanorama(ctx)
 	buildRocks(ctx)
 	buildCave(ctx)
 	buildWaterfall(ctx)
 	buildMarkers(ctx)
+	buildRoutes(ctx)
 	return buildForest(ctx)
 end
 
