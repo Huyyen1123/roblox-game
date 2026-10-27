@@ -77,6 +77,8 @@ local Sports = {
 
 -- Winter outfit worn by every rider (blocky, per the style guide)
 local Outfit = {
+	-- Off: riders keep their own avatar exactly as it is (only the gear is added)
+	Enabled = false,
 	HelmetColor = Color3.fromRGB(28, 30, 36),
 	LensColor = Color3.fromRGB(120, 95, 255),
 	GoggleFrameColor = Color3.fromRGB(20, 20, 24),
@@ -84,7 +86,7 @@ local Outfit = {
 	BackpackAccentColor = Color3.fromRGB(240, 120, 40), -- the X across the backpack
 	-- Winter shell over the avatar (blocky jacket and pants on each limb, so it follows
 	-- every pose). Bright colours keep the rider readable against snow and shadow.
-	Jacket = true,
+	Jacket = false,
 	JacketColor = Color3.fromRGB(38, 84, 196),
 	JacketTrimColor = Color3.fromRGB(24, 30, 44),
 	PantsColor = Color3.fromRGB(214, 150, 70),

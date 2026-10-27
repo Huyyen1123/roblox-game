@@ -252,6 +252,9 @@ end
 -- pose.
 local function buildOutfit(character: Model, model: Model)
 	local outfit = SportConfig.Outfit
+	if not outfit.Enabled then
+		return
+	end
 	local head = character:FindFirstChild("Head") :: BasePart?
 	if head then
 		local low, high = headBounds(character, head)

@@ -1,7 +1,8 @@
 --[[
 	PoseConfig
 	Riding stance for R15 characters, applied procedurally (see client/Animation/RiderPose).
-	Angles are in degrees.
+	Angles are in degrees. Kept simple and clean: a light, natural crouch with the arms
+	relaxed near the body, and small movements (no flailing).
 
 	Feet always stay on the equipment: the legs are solved (IK) to reach the skis or the board
 	bindings. Crouch sets how far the pelvis drops (as a hip-flex angle); the knees bend as much
@@ -16,25 +17,25 @@
 
 return {
 	Ski = {
-		Crouch = 30, -- low, athletic stance: hips down, knees well bent
+		Crouch = 16, -- light, relaxed stance: knees softly bent
 		TuckCrouch = 56, -- deep tuck
-		AirCrouch = 40, -- knees drawn up in the air
-		ChargeCrouch = 26, -- extra knee load while charging a jump
+		AirCrouch = 30, -- knees drawn up in the air
+		ChargeCrouch = 20, -- extra knee load while charging a jump
 		ChargeTorso = 10, -- chest drops over the knees while charging
-		ChargeArmBack = 28, -- arms (and poles) swing back, ready to throw forward
+		ChargeArmBack = 16, -- arms (and poles) swing back, ready to throw forward
 		PopCrouch = 4, -- legs snap almost straight at takeoff…
-		PopArmForward = 28, -- …as the arms swing forward
-		BrakeCrouch = 38,
-		TorsoPitch = 24, -- upper body leans forward, down the hill
+		PopArmForward = 14, -- …as the arms swing forward
+		BrakeCrouch = 26,
+		TorsoPitch = 12, -- upper body leans forward, down the hill
 		TuckTorsoPitch = 46,
-		ArmForward = 30, -- upper arms forward, hands in front holding the poles
+		ArmForward = 14, -- upper arms forward, hands in front holding the poles
 		TuckArmForward = 58,
-		Elbow = 40,
+		Elbow = 25,
 		TuckElbow = 48,
-		ArmOut = 14, -- arms slightly away from the body (poles clear the skis)
-		Wrist = -12, -- poles trail down and back, tips just above the snow
+		ArmOut = 8, -- arms slightly away from the body (poles clear the skis)
+		Wrist = -5, -- poles trail down and back, tips just above the snow
 		TuckWrist = -95, -- poles tucked under the arms, pointing back
-		Angulation = 14, -- upper body stays more upright than the legs in a turn
+		Angulation = 8, -- upper body stays more upright than the legs in a turn
 		NeckCompensation = 0.7, -- share of the torso lean the head undoes, to keep looking ahead
 		StanceYaw = 0,
 		-- Riding switch (backwards): a bit taller and more open for balance
@@ -47,13 +48,13 @@ return {
 		SnowplowWiden = 0.45, -- studs each foot moves out
 		BrakeArmOut = 14,
 		BrakeArmForward = 10,
-		CounterRotation = 10, -- upper body yaws against the turn to keep facing downhill
-		CarveArmForward = 12, -- inside hand drives forward through a carve
-		CarveArmOut = 10, -- outside arm lifts slightly for balance
-		AirArmOut = 12, -- arms open a little in the air (balance through spins)
+		CounterRotation = 6, -- upper body yaws against the turn to keep facing downhill
+		CarveArmForward = 6, -- inside hand drives forward through a carve
+		CarveArmOut = 5, -- outside arm lifts slightly for balance
+		AirArmOut = 8, -- arms open a little in the air (balance through spins)
 
 		PoleTrigger = 0.35, -- |steer| that counts as starting a turn
-		PlantForward = 32, -- inside arm swings forward to plant the pole
+		PlantForward = 18, -- inside arm swings forward to plant the pole
 		PlantWrist = 40, -- pole tip swings forward to touch the snow
 		PlantDuration = 0.4,
 
@@ -75,22 +76,22 @@ return {
 	},
 
 	Snowboard = {
-		Crouch = 28,
+		Crouch = 16,
 		TuckCrouch = 44,
-		AirCrouch = 40,
-		ChargeCrouch = 26,
+		AirCrouch = 30,
+		ChargeCrouch = 20,
 		ChargeTorso = 12,
 		ChargeArmBack = 18,
 		PopCrouch = 4,
 		PopArmForward = 18,
-		BrakeCrouch = 36,
-		TorsoPitch = 14,
+		BrakeCrouch = 26,
+		TorsoPitch = 8,
 		TuckTorsoPitch = 24,
-		ArmForward = 12,
+		ArmForward = 8,
 		TuckArmForward = 30,
-		Elbow = 25,
+		Elbow = 15,
 		TuckElbow = 50,
-		ArmOut = 40, -- arms out for balance
+		ArmOut = 14, -- arms out for balance
 		Wrist = 0,
 		TuckWrist = 0,
 		Angulation = 0,
@@ -108,22 +109,22 @@ return {
 			CarveMinDepth = 0.35, -- share of full depth at low speed
 			-- Toe-side: knees and hips drive over the toes, chest folds forward, hands reach low
 			ToeHipShift = 0.35, -- studs toward the toes
-			ToeCrouch = 10,
+			ToeCrouch = 6,
 			ToeTorso = 7,
 			ToeShoulderOpen = 6,
-			ToeArmForward = 32,
+			ToeArmForward = 16,
 			-- Heel-side: sit low and back, open the shoulders down the hill, rear hand drags
 			HeelHipShift = 0.65, -- studs toward the heels
-			HeelCrouch = 28,
+			HeelCrouch = 16,
 			HeelTorso = -6,
 			HeelShoulderOpen = 22,
-			HeelFrontArmOut = 28, -- front arm lifts toward the nose
-			HeelRearArmBack = 60, -- rear arm sweeps back and down toward the snow
+			HeelFrontArmOut = 14, -- front arm lifts toward the nose
+			HeelRearArmBack = 30, -- rear arm sweeps back and down toward the snow
 			-- Riding: shoulders slightly toward the nose, small continuous movement
-			ShoulderOpen = 14,
-			IdleKnee = 1.6, -- degrees of slow knee bob
-			IdleSway = 1.5, -- degrees of torso sway
-			IdleArm = 5, -- degrees of arm drift
+			ShoulderOpen = 10,
+			IdleKnee = 0.6, -- degrees of slow knee bob
+			IdleSway = 0.5, -- degrees of torso sway
+			IdleArm = 2, -- degrees of arm drift
 			-- In the air only: W/S tweak the nose or tail up (board pitches about its centre)
 			TweakAngle = 22,
 			TweakHipShift = 0.25, -- weight moves toward the raised end
@@ -136,7 +137,7 @@ return {
 			SpinArmTuck = 20, -- arms pull in during fast spins
 			-- Grabs (indy: rear hand, toe edge; melon: front hand, heel edge; method: front hand,
 			-- heel edge, board tweaked up behind)
-			GrabCrouch = 30,
+			GrabCrouch = 22,
 			GrabTorso = 18,
 			GrabLift = 0.7, -- board pulled up to the hand
 			IndyTilt = 10, -- toe edge up
@@ -154,11 +155,11 @@ return {
 			-- Limits so stacked poses (e.g. toe carve + nose press) never fold the rider in half
 			MaxTorso = 30,
 			-- Deep fast heel-side carves: rear hand reaches back to the snow
-			HeelHandDrag = 0.8,
+			HeelHandDrag = 0,
 		},
 		CarveArmForward = 0,
 		CarveArmOut = 8,
-		AirArmOut = 18,
+		AirArmOut = 8,
 
 		PoleTrigger = 2, -- never (no poles)
 		PlantForward = 0,
@@ -223,7 +224,7 @@ return {
 		-- lurches, the arm on the far side windmills for balance; fades as balance returns
 		StumbleBuckle = 9, -- degrees the pelvis rolls
 		StumbleLurch = 14, -- degrees the torso leans
-		StumbleArm = 70, -- degrees of arm windmill
+		StumbleArm = 40, -- degrees of arm windmill
 		StumbleArmRate = 9, -- windmill speed (radians/s)
 		StumbleDecay = 2.2, -- how fast the stagger settles
 		StumbleCrouch = 10,
